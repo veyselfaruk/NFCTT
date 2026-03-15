@@ -4,7 +4,7 @@ import firestore from '@react-native-firebase/firestore';
 export const saveProfileToFirebase = async (profileData) => {
     try {
         await firestore()
-            .collection('Profiles') // Frankfurt'taki koleksiyon adı
+            .collection('profiles') // Frankfurt'taki koleksiyon adı
             .doc(profileData.tagId) // NFC etiketinin benzersiz ID'si
             .set(profileData);
         
