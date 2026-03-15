@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "320574488770",
+    "project_id": "nfc-tt-7c604",
+    "storage_bucket": "nfc-tt-7c604.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:320574488770:android:37cbbb1b6a178a30857b5b",
+        "android_client_info": {
+          "package_name": "com.nfctt"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcGJotzPVS6XcTD2IxMk5BQZkSm-gQapE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
