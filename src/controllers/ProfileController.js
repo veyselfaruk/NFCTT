@@ -3,11 +3,8 @@ import firestore from '@react-native-firebase/firestore';
 // Frankfurt Firestore'a profil kaydeden fonksiyon
 export const saveProfileToFirebase = async (profileData) => {
     try {
-        await firestore()
-            .collection('profiles') // Frankfurt'taki koleksiyon adı
-            .doc(profileData.tagId) // NFC etiketinin benzersiz ID'si
-            .set(profileData);
-        
+        const profileRef = firestore().collection('profiles').doc(profileData.tagId);
+        await profileRef.set(profileData);
         console.log("Başarılı: Veri Frankfurt'a uçtu!");
         return { success: true };
     } catch (error) {

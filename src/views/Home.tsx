@@ -7,10 +7,10 @@ const Home = () => {
   const handleTestPush = async () => {
     const testData = {
       ...ProfileTemplate,
-      tagId: '1030521006', // Firebase'deki mevcut ID ile test ediyoruz
-      name: 'Mustafaa',
-      bloodType: 'B Rh+',
-      age: '17',
+      tagId: '1030516471', // Firebase'deki mevcut ID ile test ediyoruz
+      name: 'Veysel BOND',
+      bloodType: 'A Rh+',
+      age: '18',
       isLost: false,
     };
 
@@ -18,9 +18,9 @@ const Home = () => {
     const result = await saveProfileToFirebase(testData);
 
     if (result.success) {
-      Alert.alert("Başarılı!", "Veri Frankfurt sunucusundaki 'profiles' koleksiyonuna yazıldı.");
+      Alert.alert("Başarili!", "Veri Frankfurt sunucusundaki 'profiles' koleksiyonuna yazildi.");
     } else {
-      Alert.alert("Hata!", "Veri gönderilemedi. Konsol çıktısına (CMD) bir bak.");
+      Alert.alert("Hata!", "Veri gönderilemedi. Konsol çiktisina (CMD) bir bak.");
     }
   };
 
