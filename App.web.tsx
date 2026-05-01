@@ -1,85 +1,118 @@
-import React, { useState, useEffect } from 'react';
-// DİKKAT: Text ve View'u süslü parantez içinde almazsan o hatayı verir!
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
-
-// Senin Firebase Bilgilerin (Frankfurt Bağlantısı)
-const firebaseConfig = {
-  apiKey: "AIzaSyC9h3VYZ-Ch40eaBH6dAJEApjD3Vg8VGHM",
-  authDomain: "nfc-tt-7c604.firebaseapp.com",
-  projectId: "nfc-tt-7c604",
-  storageBucket: "nfc-tt-7c604.firebasestorage.app",
-  messagingSenderId: "320574488770",
-  appId: "1:320574488770:web:7331e60aeec19f6d857b5b"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+import React, { useState } from 'react';
+import { View, ActivityIndicator, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { getProfileForWeb } from './src/controllers/WebProfileController'; 
+import WebProfileView from './src/views/WebProfileView';
+import WebLoginScreen from './src/screens/WebLoginScreen';
 
 export default function App() {
-  const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [tagId, setTagId] = useState(''); 
+  const [profile, setProfile] = useState<any>(null); 
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null); // Giriş yapan kullanıcı durumu
 
-  useEffect(() => {
-    const getData = async () => {
-      try {
-        // Frankfurt'tan senin öğrenci numaranla sorgu atıyoruz
-        const docRef = doc(db, "profiles", "1030521006");
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          setProfile(snap.data());
-        }
-      } catch (error) {
-        console.log("Firebase Veri Hatası:", error);
+  const handleSearch = async () => {
+    if (!tagId) {
+      alert("ID girmeden Frankfurt hattını meşgul etme kral!");
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await getProfileForWeb(tagId);
+      if (data) {
+        setProfile(data);
+      } else {
+        alert("Böyle bir ID yok, Frankfurt'tan eli boş döndük.");
       }
+    } catch (error) {
+      console.log("Arama hatası:", error);
+    } finally {
       setLoading(false);
-    };
-    getData();
-  }, []);
+    }
+  };
 
+  // 1. ADIM: EĞER GİRİŞ YAPILMAMIŞSA SADECE LOGIN EKRANI GÖRÜNSÜN
+  if (!user) {
+    return (
+      <View style={{ flex: 1 }}>
+        <WebLoginScreen onLoginSuccess={(u: any) => setUser(u)} />
+      </View>
+    );
+  }
+
+  // 2. ADIM: GİRİŞ YAPILDIKTAN SONRAKİ ARAMA VE PROFİL SÜRECİ
   return (
     <View style={styles.container}>
-      {/* Bu sarı şeridi görüyorsan Expo çalışıyor demektir! */}
-      <View style={{ backgroundColor: 'yellow', padding: 10, width: '100%' }}>
-        <Text style={{ textAlign: 'center', fontWeight: 'bold' }}>NFCTT WEB SİSTEMİ AKTİF</Text>
+      {/* Giriş yapan kullanıcıyı üstte gösterelim ki güven versin */}
+      <View style={styles.header}>
+        <Text style={styles.welcomeText}>Hoş geldin, {user.email}</Text>
+        <TouchableOpacity onPress={() => setUser(null)}>
+          <Text style={{color: 'red'}}>Çıkış Yap</Text>
+        </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" />
-      ) : profile ? (
-        <View style={styles.card}>
-          <Text style={styles.header}>Kişi Bilgileri</Text>
-          <Text style={styles.text}>👤 Ad: {profile.name}</Text>
-          <Text style={styles.text}>🩸 Kan: {profile.bloodType}</Text>
-          <Text style={[styles.text, { fontWeight: 'bold', color: profile.isLost ? 'red' : 'green' }]}>
-            Durum: {profile.isLost ? "⚠️ KAYIP" : "✅ GÜVENDE"}
-          </Text>
+      {!profile && !loading ? (
+        <View style={styles.searchBox}>
+          <Text style={styles.title}>NFC-TT Arama Paneli</Text>
+          <TextInput 
+            placeholder="Sorgulanacak Tag ID'yi gir..."
+            style={styles.input}
+            onChangeText={setTagId}
+          />
+          <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+            <Text style={{color: 'white', fontWeight: 'bold'}}>Sorgula</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text>Frankfurt'tan veri çekiliyor...</Text>
         </View>
       ) : (
-        <Text>Veri çekilemedi, Frankfurt bağlantısını kontrol et.</Text>
+        <View style={{ flex: 1 }}>
+          <WebProfileView profileData={profile} />
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => { setProfile(null); setTagId(''); }}
+          >
+            <Text style={{color: '#007AFF', textAlign: 'center'}}>← Yeni Arama</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#f5f5f5', 
-    alignItems: 'center', 
-    justifyContent: 'center',
-    height: '100vh' as any // Tarayıcıyı kaplaması için şart
-  },
-  card: { 
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    padding: 15, 
     backgroundColor: 'white', 
-    padding: 30, 
-    borderRadius: 15, 
-    elevation: 5, 
-    width: '90%', 
-    maxWidth: 400,
-    marginTop: 20
+    borderBottomWidth: 1, 
+    borderColor: '#ddd' 
   },
-  header: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
-  text: { fontSize: 18, marginBottom: 8 }
+  welcomeText: { fontWeight: 'bold', color: '#333' },
+  searchBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  input: { 
+    width: '100%', 
+    maxWidth: 400, 
+    backgroundColor: 'white', 
+    padding: 15, 
+    borderRadius: 10, 
+    borderWidth: 1, 
+    borderColor: '#ddd',
+    marginBottom: 15 
+  },
+  searchButton: { 
+    backgroundColor: '#007AFF', 
+    padding: 15, 
+    borderRadius: 10, 
+    width: '100%', 
+    maxWidth: 400, 
+    alignItems: 'center' 
+  },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  backButton: { padding: 20 }
 });

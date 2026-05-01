@@ -1,3 +1,23 @@
+export class Profile {
+    constructor(data) {
+        this.tagId = data.tagId || '';
+        this.name = data.name || 'İsimsiz';
+        this.bloodType = data.bloodType || 'Bilinmiyor';
+        this.isLost = data.isLost || false;
+        this.healthNotes = data.healthNotes || '';
+        this.type = data.type || 'child';
+        // Veritabanından gelen karmaşık veriyi burada ayıklıyoruz
+        this.lastLocation = data.lastLocation || { latitude: 0, longitude: 0 };
+    }
+
+    // Model içine fonksiyon bile yazabilirsin
+    getStatusMessage() {
+        return this.isLost ? "⚠️ KAYIP İLANI VAR" : "✅ GÜVENDE";
+    }
+}
+
+
+
 // src/models/Profile.js
 
 export const ProfileTemplate = {
