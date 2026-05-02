@@ -3,6 +3,14 @@
     "name": "NFCTT",
     "slug": "NFCTT",
     "version": "1.0.0",
-    "platforms": ["ios", "android", "web"]
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "android": {
+  "googleServicesFile": "./google-services.json",
+  "package": "com.nfctt"
+}
   }
 }
