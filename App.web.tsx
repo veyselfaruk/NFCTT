@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, ActivityIndicator, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { getProfileForWeb } from './src/controllers/WebProfileController'; 
 import WebProfileView from './src/views/WebProfileView';
-import WebLoginScreen from './src/screens/WebLoginScreen';
+import WebLoginScreen from './src/screens/UniversalLoginScreen';
 
 export default function App() {
   const [tagId, setTagId] = useState(''); 

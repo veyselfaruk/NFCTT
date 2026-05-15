@@ -27,7 +27,8 @@ if (!firebase.apps.length) {
 import auth from '@react-native-firebase/auth';
 
 // Ekranlarımızı çağırıyoruz
-import LoginScreen from './src/screens/LoginScreen';
+// Eski LoginScreen importunu sil, bunu ekle:
+import LoginScreen from './src/screens/UniversalLoginScreen';
 
 const Stack = createStackNavigator();
 
