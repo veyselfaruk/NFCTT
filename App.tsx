@@ -29,16 +29,11 @@ import auth from '@react-native-firebase/auth';
 // Ekranlarımızı çağırıyoruz
 // Eski LoginScreen importunu sil, bunu ekle:
 import LoginScreen from './src/screens/UniversalLoginScreen';
+import ProfileSetupScreen from './src/screens/ProfileSetupScreen';
+import HomeScreen from './src/views/Home';
 
 const Stack = createStackNavigator();
 
-// Geçici Ana Sayfa Bileşeni
-const HomeScreen = () => (
-  <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-    <Text style={{ fontSize: 20, marginBottom: 20 }}>Frankfurt'a Bağlandın! Burası Ana Sayfa.</Text>
-    <Button title="Çıkış Yap" onPress={() => auth().signOut()} />
-  </SafeAreaView>
-);
 
 const App = () => {
   const [initializing, setInitializing] = useState<boolean>(true);
@@ -70,7 +65,11 @@ const App = () => {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          <Stack.Screen name="Home" component={HomeScreen} />
+          // Giriş yapıldıysa artık direkt Home değil, önce Profil Kurulumu açılacak
+          <>
+            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+            <Stack.Screen name="Home" component={HomeScreen} />
+          </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
