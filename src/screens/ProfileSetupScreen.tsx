@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+import { Picker } from '@react-native-picker/picker';
+const citiesAndDistricts = require('turkey-neighbourhoods');
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, 
   ScrollView, Platform, Alert, Image 
 } from 'react-native';
 
 // Frankfurt'a veri yazacak controller'ları ileride buraya bağlayacağız
-// import { saveProfileSetup } from '../controllers/ProfileController';
+import { saveProfileToFirebase } from '../controllers/ProfileController';
 
 export default function ProfileSetupScreen({ navigation }: any) {
   const [step, setStep] = useState(1); // Veli Bilgileri, Bağımlı Bilgileri
@@ -54,31 +56,35 @@ export default function ProfileSetupScreen({ navigation }: any) {
 
     // Bütün datayı Frankfurt sunucusuna göndermek üzere paketliyoruz
     const finalData = {
-      parent: {
-        name: parentName,
-        gender: parentGender,
-        age: parentAge,
-        address: parentAddress,
-        bloodType: parentBloodType,
-        phone: parentPhone,
-        note: parentNote
-      },
       dependent: {
-        type: dependentType,
-        name: dependentName,
         age: dependentAge,
         gender: dependentGender,
         heightWeight: dependentHeightWeight,
         bloodType: dependentBloodType,
         note: dependentNote,
-        photo: photoUri // Şimdilik yerel URI, ileride Firebase Storage'a yüklenecek
+        photo: photoUri,
+        type: dependentType,
+      },
+      parent: {
+        name: parentName,
+        phone: parentPhone,
+        address: parentAddress,
+        age: parentAge,
+        gender: parentGender,
+        bloodType: parentBloodType,
+        note: parentNote
       }
     };
 
     console.log("Frankfurt'a gidecek paket:", finalData);
-    notify('Başarılı', 'Profil bilgileri Frankfurt sunucusuna başarıyla işlendi!');
     
-    // İşlem bitince ana sayfaya (HomeScreen / Arama Paneli) yönlendiriyoruz
+    // 1. Veriyi arka planda Frankfurt Firestore'a gönderiyoruz
+    await saveProfileToFirebase(finalData); 
+
+    // 2. Kullanıcıya başarılı bildirimini fırlatıyoruz
+    notify('Başarılı', 'Profil bilgileri Frankfurt sunucusuna başarıyla işlendi!');
+
+    // 3. Bildirimin ardından bizi yeni Komuta Merkezine uçuruyor
     navigation.navigate('Home');
   };
 
@@ -108,10 +114,49 @@ export default function ProfileSetupScreen({ navigation }: any) {
           <Text style={styles.sectionTitle}>1. Veli (Hesap Sahibi) Bilgileri</Text>
           
           <TextInput placeholder="İsim Soyisim *" style={styles.input} onChangeText={setParentName} value={parentName} />
-          <TextInput placeholder="Cinsiyet" style={styles.input} onChangeText={setParentGender} value={parentGender} />
-          <TextInput placeholder="Yaş" style={styles.input} keyboardType="numeric" onChangeText={setParentAge} value={parentAge} />
+          <Text style={styles.inputLabel}>Cinsiyet</Text>
+          <View style={styles.pickerContainer}>
+          <Picker
+          selectedValue={parentGender}
+          onValueChange={(itemValue) => setParentGender(itemValue)}
+          dropdownIconColor="#FFF" // Tasarımına göre rengi değiştirebilirsin kanka
+          >
+          <Picker.Item label="Seçiniz" value="" />
+          <Picker.Item label="Erkek" value="Erkek" />
+          <Picker.Item label="Kadın" value="Kadın" />
+          <Picker.Item label="Belirtmek İstemiyorum" value="Belirtmek İstemiyorum" />
+          </Picker>
+          </View>
+          <Text style={styles.inputLabel}>Yaş</Text>
+<View style={styles.pickerContainer}>
+  <Picker
+    selectedValue={parentAge}
+    onValueChange={(itemValue) => setParentAge(itemValue)}
+  >
+    <Picker.Item label="Seçiniz" value="" />
+    {Array.from({ length: 82 }, (_, i) => i + 18).map((age) => (
+      <Picker.Item key={age} label={String(age)} value={String(age)} />
+    ))}
+  </Picker>
+</View>
           <TextInput placeholder="İletişim Bilgileri (Telefon) *" style={styles.input} keyboardType="phone-pad" onChangeText={setParentPhone} value={parentPhone} />
-          <TextInput placeholder="Kan Grubu" style={styles.input} onChangeText={setParentBloodType} value={parentBloodType} />
+          <Text style={styles.inputLabel}>Kan Grubu</Text>
+<View style={styles.pickerContainer}>
+  <Picker
+    selectedValue={parentBloodType}
+    onValueChange={(itemValue) => setParentBloodType(itemValue)}
+  >
+    <Picker.Item label="Seçiniz" value="" />
+    <Picker.Item label="A+" value="A+" />
+    <Picker.Item label="A-" value="A-" />
+    <Picker.Item label="B+" value="B+" />
+    <Picker.Item label="B-" value="B-" />
+    <Picker.Item label="AB+" value="AB+" />
+    <Picker.Item label="AB-" value="AB-" />
+    <Picker.Item label="0+" value="0+" />
+    <Picker.Item label="0-" value="0-" />
+  </Picker>
+</View>
           <TextInput placeholder="Adres *" style={[styles.input, { height: 80 }]} multiline onChangeText={setParentAddress} value={parentAddress} />
           <TextInput placeholder="Ek Not (Hastalık, kronik durum vb.)" style={[styles.input, { height: 60 }]} multiline onChangeText={setParentNote} value={parentNote} />
 
@@ -215,5 +260,21 @@ const styles = StyleSheet.create({
   primaryButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   secondaryButton: { backgroundColor: '#e0e0e0', padding: 15, borderRadius: 10, alignItems: 'center', flex: 1 },
   buttonText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
-  actionButtons: { flexDirection: 'row', gap: 10, marginTop: 15, alignItems: 'center' }
+  actionButtons: { flexDirection: 'row', gap: 10, marginTop: 15, alignItems: 'center' },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#555',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  pickerContainer: {
+    backgroundColor: '#f9f9f9', // Senin mevcut input arka plan renginle eşitledim kanka
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eee', // Senin mevcut input border renginle eşitledim
+    marginBottom: 12,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  }
 });

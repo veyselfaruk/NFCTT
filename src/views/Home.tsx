@@ -4,6 +4,8 @@ import {
   ScrollView, SafeAreaView, Platform 
 } from 'react-native';
 
+import auth from '@react-native-firebase/auth';
+
 export default function HomeScreen({ navigation }: any) {
   // Canlı durumu simüle eden state. 
   // Test etmek için 'finderNote' alanını boş string "" yaparsan "Not eklenmedi" durumunu görürsün.
@@ -78,9 +80,17 @@ export default function HomeScreen({ navigation }: any) {
         </TouchableOpacity>
 
         {/* SAĞ: KULLANICI PROFİLİ */}
-        <TouchableOpacity style={styles.barItem}>
+        {/* SAĞ: KULLANICI PROFİLİ (ÇIKIŞ YAP FONKSİYONU) */}
+        <TouchableOpacity 
+          style={styles.barItem} 
+          onPress={() => {
+            auth().signOut()
+              .then(() => console.log('Frankfurt oturumu kapatıldı.'))
+              .catch(err => console.error('Çıkış yapılırken hata oluştu:', err));
+          }}
+        >
           <Text style={styles.barIcon}>👤</Text>
-          <Text style={styles.barText}>Profil</Text>
+          <Text style={styles.barText}>Çıkış Yap</Text>
         </TouchableOpacity>
 
       </View>
