@@ -1,27 +1,26 @@
 import React, { useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, 
-  ScrollView, SafeAreaView, Platform 
+  ScrollView, Platform 
 } from 'react-native';
 
-import auth from '@react-native-firebase/auth';
+// GÜNCEL SAF OLAN SAFEAREAVIEW VE FIREBASE AUTH YAPILARI
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { getAuth, signOut } from 'firebase/auth';
 
 export default function HomeScreen({ navigation }: any) {
-  // Canlı durumu simüle eden state. 
-  // Test etmek için 'finderNote' alanını boş string "" yaparsan "Not eklenmedi" durumunu görürsün.
-  // Eğer hiçbir bildirim yoksa bu state'i direkt null yapabiliriz: const [activeAlert, setActiveAlert] = useState<any>(null);
-  const [activeAlert, setActiveAlert] = useState<any>({
-    finderNote: "Çocuğu parktaki kafenin yanında buldum, güvende. Yanındayım şu an.", // Opsiyonel alan
-    time: "Şimdi",
-  });
+  // Canlı bildirim durumunu simüle eden state
+  const [activeAlert, setActiveAlert] = useState<any>(
+    null // Gerçek dünyada başlangıçta null olur, bildirim gelince dolar. Test için objeyi tutabilirsin.
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       
       {/* 1. ÜST KISIM: KOMUTA MERKEZİ VE BİLDİRİM PANELİ */}
       <ScrollView style={styles.mainContent} contentContainerStyle={{ padding: 20 }}>
-        <Text style={styles.welcomeText}>NFCTT Komuta Merkezi</Text>
-        <Text style={styles.subText}>Etiketleriniz Frankfurt sunucusu üzerinden canlı izleniyor.</Text>
+        <Text style={styles.welcomeText}>NFCTT Güvenlik Merkezi</Text>
+        <Text style={styles.subText}>Akıllı etiketleriniz anlık olarak bulut sistemi üzerinden takip edilmektedir.</Text>
 
         {/* DİNAMİK DURUM KARTI */}
         {activeAlert ? (
@@ -31,7 +30,7 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={styles.alertTime}>{activeAlert.time}</Text>
             
             <View style={styles.noteContainer}>
-              <Text style={styles.noteLabel}>Bulucu Notu (Opsiyonel):</Text>
+              <Text style={styles.noteLabel}>Bulucu Notu:</Text>
               {activeAlert.finderNote && activeAlert.finderNote.trim() !== "" ? (
                 <Text style={styles.noteText}>"{activeAlert.finderNote}"</Text>
               ) : (
@@ -43,18 +42,18 @@ export default function HomeScreen({ navigation }: any) {
 
             {/* AKSİYON BUTONLARI */}
             <TouchableOpacity style={styles.actionButtonPrimary}>
-              <Text style={styles.actionButtonText}>💬 Bulucuyla Sohbet Başlat</Text>
+              <Text style={styles.actionButtonText}>💬 Bulucuyla İletişime Geç</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionButtonSecondary}>
-              <Text style={styles.actionButtonTextSecondary}>📍 Canlı Konumu Gör</Text>
+              <Text style={styles.actionButtonTextSecondary}>📍 Konumu Görüntüle</Text>
             </TouchableOpacity>
           </View>
         ) : (
           // EĞER HER ŞEY YOLUNDAYSA (SESSİZ MOD)
           <View style={[styles.statusCard, styles.safeCard]}>
             <Text style={styles.safeTitle}>🟢 Sistem Aktif</Text>
-            <Text style={styles.safeText}>Şu an bildirilen herhangi bir kayıp durumu yok. Etiketleriniz güvende.</Text>
+            <Text style={styles.safeText}>Şu an bildirilen herhangi bir kayıp durumu bulunmuyor. Tüm etiketleriniz güvende.</Text>
           </View>
         )}
       </ScrollView>
@@ -62,7 +61,7 @@ export default function HomeScreen({ navigation }: any) {
       {/* 2. ALT KISIM: ALT ŞERİT (BOTTOM BAR) */}
       <View style={styles.bottomBar}>
         
-        {/* SOL: AYARLAR (YENİDEN SETUP'A DÖNDÜRÜR) */}
+        {/* SOL: AYARLAR */}
         <TouchableOpacity 
           style={styles.barItem} 
           onPress={() => navigation.navigate('ProfileSetup')}
@@ -76,17 +75,20 @@ export default function HomeScreen({ navigation }: any) {
           <View style={styles.nfcCircle}>
             <Text style={styles.nfcIcon}>📶</Text>
           </View>
-          <Text style={[styles.barText, { marginTop: 4, fontWeight: 'bold', color: '#007AFF' }]}>NFC Oku</Text>
+          <Text style={[styles.barText, { marginTop: 4, fontWeight: 'bold', color: '#007AFF' }]}>NFC Tarat</Text>
         </TouchableOpacity>
 
-        {/* SAĞ: KULLANICI PROFİLİ */}
-        {/* SAĞ: KULLANICI PROFİLİ (ÇIKIŞ YAP FONKSİYONU) */}
+        {/* SAĞ: GÜVENLİ ÇIKIŞ YAP FONKSİYONU */}
         <TouchableOpacity 
           style={styles.barItem} 
-          onPress={() => {
-            auth().signOut()
-              .then(() => console.log('Frankfurt oturumu kapatıldı.'))
-              .catch(err => console.error('Çıkış yapılırken hata oluştu:', err));
+          onPress={async () => {
+            try {
+              const auth = getAuth();
+              await signOut(auth);
+              console.log('Kullanıcı oturumu başarıyla kapatıldı.');
+            } catch (err) {
+              console.error('Oturum kapatılırken bir hata oluştu:', err);
+            }
           }}
         >
           <Text style={styles.barIcon}>👤</Text>
@@ -100,9 +102,9 @@ export default function HomeScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: '#f8f9fa', width: '100%', height: '100%' },
   mainContent: { flex: 1 },
-  welcomeText: { fontSize: 24, fontWeight: 'bold', color: '#222', marginTop: Platform.OS === 'android' ? 20 : 0 },
+  welcomeText: { fontSize: 24, fontWeight: 'bold', color: '#222', marginTop: Platform.OS === 'android' ? 10 : 0 },
   subText: { fontSize: 14, color: '#666', marginTop: 5, marginBottom: 25 },
   statusCard: { padding: 20, borderRadius: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   safeCard: { backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#c8e6c9' },

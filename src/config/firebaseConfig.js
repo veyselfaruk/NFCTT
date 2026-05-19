@@ -1,5 +1,6 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 export const firebaseConfig = {
   apiKey: "AIzaSyC9h3VYZ-Ch40eaBH6dAJEApjD3Vg8VGHM",
@@ -10,6 +11,11 @@ export const firebaseConfig = {
   appId: "1:320574488770:web:7331e60aeec19f6d857b5b"
 };
 
-// Uygulamayı başlat ve veritabanını (Firestore) dışa aktar
+// Firebase'i başlatıyoruz
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// Dışarıya aktaracağımız servisleri Web standartlarında oluşturuyoruz
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+export { db, storage };
