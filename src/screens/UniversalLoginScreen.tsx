@@ -9,7 +9,10 @@ import { signIn as mobileSignIn, signUp as mobileSignUp } from '../controllers/A
 // Mustafa'nın (Ubeyde) web için yazdığı controller
 import { signIn as webSignIn } from '../controllers/WebAuthController'; 
 
-const UniversalLoginScreen = ({ onLoginSuccess }: { onLoginSuccess?: (user: any) => void }) => {
+// KANKA AKILLI SORGULAMA İÇİN FİREBASE FİRESTORE MODÜLLERİNİ ÇEKİYORUZ
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+
+const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any, onLoginSuccess?: (user: any) => void }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,19 +48,65 @@ const UniversalLoginScreen = ({ onLoginSuccess }: { onLoginSuccess?: (user: any)
       result = { success: false, error: err.message };
     }
 
-    setLoading(false);
-
-    // 3. SONUÇ DEĞERLENDİRMESİ
+    // 3. SONUÇ DEĞERLENDİRMESİ VE GÖZ KIRPMASIZ AKILLI YÖNLENDİRME AKIŞI
     if (result && result.success) {
-      notify('Başarılı', type === 'login' ? 'Giriş yapıldı!' : 'Kayıt başarılı!');
-      
       const loggedInUser = result.user; 
 
-      // Ubeyde'nin web tarafında state'i güncellemesi için bu şart
+      if (type === 'login') {
+        // MOBİLDEYSEK VE KULLANICI GİRİŞ YAPTIYSA DAHA ÖNCEDEN KAYDI VAR MI KONTROL EDELİM
+        if (Platform.OS !== 'web' && loggedInUser) {
+          // GÖZ KIRPMAYI ENGELLEYEN EN KRİTİK ADIM: Loading durumunu Firestore sorgusundan önce yukarda sabit tutuyoruz
+          setLoading(true); 
+          
+          try {
+            console.log("Kullanıcı giriş yaptı, profil kontrolü tetikleniyor... UID:", loggedInUser.uid);
+            const db = getFirestore();
+            
+            // "profiles" koleksiyonundan dökümanı çekiyoruz
+            const profileRef = doc(db, "profiles", loggedInUser.uid); 
+            const profileSnap = await getDoc(profileRef);
+
+            if (profileSnap.exists()) {
+              console.log("Kayıtlı profil Firestore üzerinde başarıyla doğrulandı!");
+              
+              // Önce üst seviyedeki (App.tsx) user state'ini güncelleyelim kanka
+              if (onLoginSuccess) {
+                onLoginSuccess(loggedInUser);
+              }
+              
+              // Ekranın anlık sıçramasını engellemek için reset atıp direkt fırlatıyoruz
+              setLoading(false);
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }], 
+              });
+              return; 
+            } else {
+              console.log("Bu UID ile eşleşen bir profil dökümanı bulunamadı.");
+              if (onLoginSuccess) onLoginSuccess(loggedInUser);
+              
+              setLoading(false);
+              navigation.replace('ProfileSetup');
+              return;
+            }
+          } catch (dbErr) {
+            console.error("Firestore profil sorgulama hatası:", dbErr);
+            if (onLoginSuccess) onLoginSuccess(loggedInUser);
+            setLoading(false);
+            navigation.replace('ProfileSetup');
+            return;
+          }
+        }
+      }
+
+      // Kayıt olma durumu veya web akışı ise eski nizam orijinal haline devam etsin kanka
+      setLoading(false);
+      notify('Başarılı', type === 'login' ? 'Giriş yapıldı!' : 'Kayıt başarılı!');
       if (onLoginSuccess && loggedInUser) {
         onLoginSuccess(loggedInUser);
       }
     } else {
+      setLoading(false);
       notify('Hata', result?.error || 'Bir şeyler ters gitti.');
     }
   };
@@ -144,7 +193,6 @@ const styles = StyleSheet.create({
     padding: 15, 
     borderRadius: 8, 
     alignItems: 'center',
-    // Butona basıldığında efekt (Web için cursor)
     ...Platform.select({
       web: { cursor: 'pointer' }
     })

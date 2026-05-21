@@ -1,31 +1,34 @@
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebaseConfig';
-import { getAuth } from 'firebase/auth'; // Web auth yapısı için ekledik
+import { getAuth } from 'firebase/auth'; 
 
 export const saveProfileToFirebase = async (profilePack) => {
   try {
-    // Giriş yapan kullanıcının UID'sini Web Auth modülünden dinamik çekiyoruz
     const auth = getAuth();
     const currentUser = auth.currentUser;
     const userId = currentUser ? currentUser.uid : 'anonymous_user';
 
-    // Frankfurt Firestore'a gidecek paketi hazırlıyoruz
     const dataToSend = {
       userId: userId,
-      dependent: profilePack.dependent, // Bağımlı (çocuk/evcil hayvan/yaşlı) bilgileri
-      parent: profilePack.parent,       // Veli bilgileri (Yeni il ve ilçe de dahil)
-      createdAt: serverTimestamp(),     // Frankfurt saatiyle kayıt zamanı (Web formatında)
+      dependent: profilePack.dependent, 
+      parent: profilePack.parent,       
+      createdAt: serverTimestamp(),     
     };
 
-    console.log("Frankfurt'a gönderilecek nihai Web Firestore paketi: ", JSON.stringify(dataToSend));
+    // Geliştirici konsol logu (Üretim modunda son kullanıcı bunu görmez kanka)
+    console.log("Veri paketi senkronizasyona hazır.");
 
-    // 'profiles' koleksiyonuna velinin benzersiz userId'si ile doküman açıp yazıyoruz (Web Standartı)
     const docRef = doc(db, 'profiles', userId);
-    await setDoc(docRef, dataToSend, { merge: true }); // merge: true eski alanları korur, yenileri üzerine yazar
+    
+    // Veritabanına güvenli yazma işlemi
+    await setDoc(docRef, dataToSend, { merge: true }); 
 
     return { success: true };
   } catch (error) {
-    console.error("Firestore'a veri yazılırken Frankfurt'ta hata oluştu:", error);
-    return { success: false, error };
+    // Hatayı sadece biz terminalde görelim diye logluyoruz:
+    console.error("Arka plan senkronizasyon hatası:", error);
+    
+    // Ekrana teknik detay fırlatmasın, Screen'deki try-catch bloğuna "Hata var, sen devral" diyoruz
+    throw new Error("Senkronizasyon hatası"); 
   }
 };

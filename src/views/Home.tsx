@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { 
   View, Text, StyleSheet, TouchableOpacity, 
   ScrollView, Platform 
@@ -10,18 +11,40 @@ import { getAuth, signOut } from 'firebase/auth';
 
 export default function HomeScreen({ navigation }: any) {
   // Canlı bildirim durumunu simüle eden state
-  const [activeAlert, setActiveAlert] = useState<any>(
-    null // Gerçek dünyada başlangıçta null olur, bildirim gelince dolar. Test için objeyi tutabilirsin.
-  );
+  const [activeAlert, setActiveAlert] = useState<any>(null);
+
+  // Güvenli çıkış fonksiyonu (Tek çatı altında topladık)
+  const handleLogout = async () => {
+    try {
+      const auth = getAuth();
+      await signOut(auth);
+      console.log('Kullanıcı oturumu başarıyla kapatıldı.');
+    } catch (err) {
+      console.error('Oturum kapatılırken bir hata oluştu:', err);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* 1. ÜST KISIM: KOMUTA MERKEZİ VE BİLDİRİM PANELİ */}
-      <ScrollView style={styles.mainContent} contentContainerStyle={{ padding: 20 }}>
-        <Text style={styles.welcomeText}>NFCTT Güvenlik Merkezi</Text>
-        <Text style={styles.subText}>Akıllı etiketleriniz anlık olarak bulut sistemi üzerinden takip edilmektedir.</Text>
+      {/* 1. ÜST KISIM: BAŞLIK ALANI VE SAĞ ÜST GÜVENLİ ÇIKIŞ BUTONU */}
+      <View style={styles.headerContainer}>
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <Text style={styles.welcomeText}>NFCTT Güvenlik Merkezi</Text>
+          <Text style={styles.subText}>Akıllı etiketleriniz anlık olarak bulut sistemi üzerinden takip edilmektedir.</Text>
+        </View>
 
+        {/* SAĞ ÜST MİNİMALİST GÜVENLİ ÇIKIŞ BUTONU */}
+        <TouchableOpacity style={styles.logoutTopButton} onPress={handleLogout}>
+        {/* Attığın görseldeki minimalist kapı ve ok ikonunun birebir aynısı */}
+          <MaterialCommunityIcons name="logout" size={16} color="#000" style={{ marginRight: 6 }} />
+          <Text style={styles.logoutText}>Güvenli Çıkış</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 2. ORTA KISIM: BİLDİRİM PANELİ İÇERİĞİ */}
+      <ScrollView style={styles.mainContent} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+        
         {/* DİNAMİK DURUM KARTI */}
         {activeAlert ? (
           // EĞER BULUCUDAN BİLDİRİM GELDİYSE (ACİL DURUM MODU)
@@ -58,13 +81,13 @@ export default function HomeScreen({ navigation }: any) {
         )}
       </ScrollView>
 
-      {/* 2. ALT KISIM: ALT ŞERİT (BOTTOM BAR) */}
+      {/* 3. ALT KISIM: ALT ŞERİT (BOTTOM BAR - ESKİ ORİJİNAL HALİ) */}
       <View style={styles.bottomBar}>
         
-        {/* SOL: AYARLAR */}
+        {/* SOL: AYARLAR (GÜNCELLEME PARAMETRESİ GÖNDERİYORUZ) */}
         <TouchableOpacity 
           style={styles.barItem} 
-          onPress={() => navigation.navigate('ProfileSetup')}
+          onPress={() => navigation.navigate('ProfileSetup', { isUpdating: true })} // <--- BURAYA { isUpdating: true } EKLEDİK KANKA
         >
           <Text style={styles.barIcon}>⚙️</Text>
           <Text style={styles.barText}>Ayarlar</Text>
@@ -78,21 +101,16 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={[styles.barText, { marginTop: 4, fontWeight: 'bold', color: '#007AFF' }]}>NFC Tarat</Text>
         </TouchableOpacity>
 
-        {/* SAĞ: GÜVENLİ ÇIKIŞ YAP FONKSİYONU */}
+       {/* SAĞ: PROFİLİM SEKMESİ (ŞİMDİLİK BOŞ / ASKIDA) */}
         <TouchableOpacity 
           style={styles.barItem} 
-          onPress={async () => {
-            try {
-              const auth = getAuth();
-              await signOut(auth);
-              console.log('Kullanıcı oturumu başarıyla kapatıldı.');
-            } catch (err) {
-              console.error('Oturum kapatılırken bir hata oluştu:', err);
-            }
-          }}
+          onPress={() => {
+            // Kanka burayı şimdilik askıya aldık, basınca uygulamanın önünü kesmesin
+            alert('Profil sayfanız çok yakında aktif olacaktır!');
+          }} 
         >
           <Text style={styles.barIcon}>👤</Text>
-          <Text style={styles.barText}>Çıkış Yap</Text>
+          <Text style={styles.barText}>Profilim</Text>
         </TouchableOpacity>
 
       </View>
@@ -103,9 +121,42 @@ export default function HomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa', width: '100%', height: '100%' },
+  headerContainer: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-start', 
+    paddingHorizontal: 20, 
+    paddingTop: Platform.OS === 'android' ? 15 : 5,
+    width: '100%' 
+  },
   mainContent: { flex: 1 },
-  welcomeText: { fontSize: 24, fontWeight: 'bold', color: '#222', marginTop: Platform.OS === 'android' ? 10 : 0 },
-  subText: { fontSize: 14, color: '#666', marginTop: 5, marginBottom: 25 },
+  welcomeText: { fontSize: 24, fontWeight: 'bold', color: '#222' },
+  subText: { fontSize: 14, color: '#666', marginTop: 5, marginBottom: 15 },
+  
+  // YENİ SAĞ ÜST ÇIKIŞ BUTONU STİLLERİ
+  logoutTopButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#000', 
+    marginTop: 5,
+  },
+  logoutIcon: { 
+    fontSize: 14, 
+    marginRight: 4,
+  },
+  logoutText: { 
+    color: '#000', 
+    fontSize: 12, 
+    fontWeight: '700',
+    textTransform: 'uppercase', 
+    letterSpacing: 0.5,
+  },
+
   statusCard: { padding: 20, borderRadius: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   safeCard: { backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#c8e6c9' },
   safeTitle: { fontSize: 18, fontWeight: 'bold', color: '#2e7d32' },
