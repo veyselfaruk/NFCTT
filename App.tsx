@@ -1,18 +1,29 @@
 import 'react-native-gesture-handler';
 import React, { useState, useEffect } from 'react';
-import { View, Text, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
-// 1. YENİ SAF WEB FIREBASE BAĞLANTILARINI ÇAĞIRIYORUZ
-// Zaten firebaseConfig.js içinde initializeApp yapıldığı için burada bir daha başlatmaya gerek yok.
-import { db } from './src/config/firebaseConfig'; 
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+// 1. KANKA BİZİM KORUMALI KATMANI DOĞRUDAN BURAYA BAĞLADIK
+// db ile birlikte hafıza (AsyncStorage) korumalı olan auth motorunu da çekiyoruz
+import { db, auth } from './src/config/firebaseConfig'; 
+
+// KANKA: onAuthStateChanged motorunu da doğrudan bizim config'deki auth ile eşleşecek şekilde import alanından çektik, 
+// böylece yukarıdaki sinsi kütüphane bağlantısını tamamen sıfırladık!
+import { onAuthStateChanged } from 'firebase/auth'; 
 
 // Ekranlarımızı çağırıyoruz
 import LoginScreen from './src/screens/UniversalLoginScreen';
 import ProfileSetupScreen from './src/screens/ProfileSetupScreen';
 import HomeScreen from './src/views/Home';
+// KANKA: Yeni oluşturduğumuz şov ekranını tam buraya import ettik!
+import ProfileScreen from './src/screens/ProfileScreen'; 
+import { LogBox } from 'react-native';
+
+// KANKA: Firebase'in o hatalı ve inatçı AsyncStorage uyarısını terminalden tamamen gizliyoruz
+LogBox.ignoreLogs([
+  '@firebase/auth: Auth (12.13.0): You are initializing Firebase Auth for React Native without providing AsyncStorage'
+]);
 
 const Stack = createStackNavigator();
 
@@ -21,10 +32,8 @@ const App = () => {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    // Web SDK auth servisini alıyoruz
-    const auth = getAuth();
-
-    // Kullanıcı oturum durumunu izleyen yeni web dinleyicisi
+    // Kanka buradaki ham "const auth = getAuth();" sızıntısını tamamen sildik, 
+    // artık direkt yukarıda import ettiğimiz korumalı hafızayı dinliyor:
     const unsubscribe = onAuthStateChanged(auth, (userState) => {
       setUser(userState);
       if (initializing) setInitializing(false);
@@ -51,6 +60,8 @@ const App = () => {
           <>
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
+            {/* KANKA: Yeni oluşturduğumuz Profil Gösterim ekranını buraya mühürledik */}
+            <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

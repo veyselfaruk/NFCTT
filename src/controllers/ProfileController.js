@@ -1,10 +1,14 @@
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../config/firebaseConfig';
-import { getAuth } from 'firebase/auth'; 
+// KANKA BİZİM KORUMALI KATMANI BURAYA BAĞLADIK
+// db ile birlikte hafıza korumalı olan auth motorunu da config dosyamızdan çekiyoruz
+import { db, auth } from '../config/firebaseConfig'; 
+
+// KANKA: Sinsi sızıntı yapan "import { getAuth } from 'firebase/auth';" satırını buradan tamamen temizledik!
 
 export const saveProfileToFirebase = async (profilePack) => {
   try {
-    const auth = getAuth();
+    // Kanka burmadaki ham "const auth = getAuth();" sızıntısını tamamen sildik,
+    // artık direkt yukarıda import ettiğimiz korumalı auth'un currentUser nesnesini okuyor:
     const currentUser = auth.currentUser;
     const userId = currentUser ? currentUser.uid : 'anonymous_user';
 
@@ -20,7 +24,7 @@ export const saveProfileToFirebase = async (profilePack) => {
 
     const docRef = doc(db, 'profiles', userId);
     
-    // Veritabanına güvenli yazma işlemi
+    // Veritabanına güvenli yazma işlemi kanka, yapıyı hiç bozmadan aynen koruduk
     await setDoc(docRef, dataToSend, { merge: true }); 
 
     return { success: true };

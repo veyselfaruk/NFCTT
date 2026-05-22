@@ -1,8 +1,10 @@
-// src/controllers/AuthController.js
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { app } from "../config/firebaseConfig"; // Ortak config dosyan
+// KANKA BİZİM KORUMALI KATMANI ÇAĞIRIYORUZ
+// app yerine doğrudan hafıza korumalı auth motorunu config dosyamızdan çekiyoruz
+import { auth } from "../config/firebaseConfig"; 
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth"; 
 
-const auth = getAuth(app);
+// KANKA: Kullanılmayan sinsi signOut importunu ve fazla kütüphane bağlarını temizledik!
+// Artık aşağıdaki fonksiyonlar direkt yukarıda import ettiğimiz korumalı auth'u kullanacak.
 
 export const signUp = async (email, password) => {
   try {

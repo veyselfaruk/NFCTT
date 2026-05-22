@@ -1,14 +1,15 @@
-// SAF WEB FIREBASE AUTH YAPILARINI ÇAĞIRIYORUZ
+// KANKA BİZİM KORUMALI KATMANI BURAYA BAĞLADIK
+// firebaseConfig dosyanız src/config altında, bu dosya da src/controllers altındaysa iki nokta (../) ile dışarı çıkıp bağlanıyoruz
+import { auth } from '../config/firebaseConfig'; 
 import { 
-  getAuth, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword 
-} from 'firebase/auth';
+} from 'firebase/auth'; 
 
 // 1. Yeni Kullanıcı Kaydı (Register)
 export const signUp = async (email, password) => {
   try {
-    const auth = getAuth();
+    // Kanka buradaki ham "const auth = getAuth();" sızıntısını sildik, yukarıdaki korumalı auth'u kullanıyor
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     console.log("Kullanıcı kaydı başarıyla oluşturuldu.");
     return { success: true, user: userCredential.user };
@@ -21,7 +22,7 @@ export const signUp = async (email, password) => {
 // 2. Mevcut Kullanıcı Girişi (Login)
 export const signIn = async (email, password) => {
   try {
-    const auth = getAuth();
+    // Kanka buradaki ham "const auth = getAuth();" sızıntısını da sildik
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     console.log("Kullanıcı oturumu başarıyla açıldı.");
     return { success: true, user: userCredential.user };
