@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-// KANKA: Bizim korumalı ve hafızalı katman tek çatı altında burayı yönetiyor
 import { auth, storage, db } from '../config/firebaseConfig'; 
-// Sinsi ham getAuth and getFirestore import kırıntılarını tamamen temizledik kanka!
 import { doc, getDoc } from 'firebase/firestore'; 
 import {
   View,
@@ -21,13 +19,15 @@ import {
 
 const citiesAndDistricts = require('turkey-neighbourhoods');
 import { saveProfileToFirebase } from '../controllers/ProfileController';
+import BottomBar from '../components/BottomBar';
 
 export default function ProfileSetupScreen({ navigation }: any) {
   // =========================================================================
-  // 1. TÜM REAC/TYPESCRIPT STATE TANIMLAMALARI (EN ÜSTTE Kİ HATALAR SIFIRLANSIN)
+  // 1. TÜM REAC/TYPESCRIPT STATE TANIMLAMALARI
   // =========================================================================
   const [checkingProfile, setCheckingProfile] = useState(true);
   const [step, setStep] = useState(1); 
+  const [isDataLoading, setIsDataLoading] = useState(true);
 
   // --- VELİ STATE'LERİ ---
   const [parentName, setParentName] = useState('');
@@ -40,8 +40,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
   const [parentDistrict, setParentDistrict] = useState(''); 
   const [parentAddress, setParentAddress] = useState(''); 
   const [parentNote, setParentNote] = useState('');
-
-  // İlçe listesini tutacak dinamik state
   const [districtList, setDistrictList] = useState<string[]>([]);
 
   // --- BAĞIMLI STATE'LERİ ---
@@ -50,22 +48,19 @@ export default function ProfileSetupScreen({ navigation }: any) {
   const [dependentAge, setDependentAge] = useState('');
   const [dependentGender, setDependentGender] = useState('');
   const [dependentHeightWeight, setDependentHeightWeight] = useState('');
-  const [dependentChipNumber, setDependentChipNumber] = useState(''); // KANKA ÇİP İÇİN HAFIZA ODASI AÇTIK!
+  const [dependentChipNumber, setDependentChipNumber] = useState(''); 
   const [dependentBloodType, setDependentBloodType] = useState('');
   const [dependentNote, setDependentNote] = useState('');
   const [dependentSubCategory, setDependentSubCategory] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
 
-  // KANKA: Hızlı basışlarda arayüzün kilitlenmesini engelleyen fiziksel buton kilidi
   const [isResetting, setIsResetting] = useState(false);
 
-  // =========================================================================
-  // 2. USEEFFECT MOTORLARI VE MANGE MANTIKLARI
-  // =========================================================================
+  // BILADER SÜPER KORUMA BELLEĞİ: Veritabanından gelen orijinal veriyi sayfa ömrü boyunca burada kilitliyoruz!
+  const dbBackupRef = useRef<any>(null);
 
-  // --- SİNSİ GÖZ KIRPMA KORUMA FİLTRESİ VE ESNEK VERİ DOLDURMA ---
+  // --- ESNEK VERİ DOLDURMA MOTORU VE GİRİŞ KORUMASI ---
   useEffect(() => {
-    // KANKA: Ekranın açık olup olmadığını takip eden asenkron koruma bayrağı
     let isMounted = true;
 
     const bypassIfProfileExists = async () => {
@@ -76,6 +71,8 @@ export default function ProfileSetupScreen({ navigation }: any) {
         console.log("BU REİS AYARLARDAN VEYA PROFİLDEN GELDİ, KAPILARI AÇIN!");
         
         try {
+          if (isMounted) setIsDataLoading(true);
+
           const currentUser = auth.currentUser;
           if (currentUser) {
             const profileRef = doc(db, "profiles", currentUser.uid);
@@ -89,10 +86,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
               if (rawData) {
                 console.log("Esnek şema kontrolü tetiklendi...");
                 
-                // KANKA MUTLAK ZIRH: Eğer veri finalData altındaysa onu al, yoksa ham veriyi çek
                 let firestoreData = rawData.finalData ? rawData.finalData : rawData;
-                
-                // Eğer hâlâ ana veli ismi boş kalıyorsa bir kez daha ham köke asıl kanka:
                 if (!firestoreData?.parent?.name && rawData?.parent?.name) {
                   firestoreData = rawData;
                 }
@@ -115,50 +109,36 @@ export default function ProfileSetupScreen({ navigation }: any) {
                   }
                 }
 
-                // ================= BAĞIMLI BİLGİLERİ EŞİTLEME (MERGE ZIRHI kanka) =================
-                // KANKA BOMBA GÜNCELLEME: finalData.dependent içindeki verileri alıyoruz. 
-                // Ama eğer isim vb. alanlar yoksa, ham kökteki (rawData.dependent) ya da direkt kökteki alanlarla harmanlıyoruz!
-                const fDependent = firestoreData.dependent || {};
-                const rDependent = rawData.dependent || {};
+                // ================= BAĞIMLI BİLGİLERİ EŞİTLEME =================
+                const fDep = firestoreData.dependent || {};
+                const rDep = rawData.dependent || {};
                 
-                // İki katmanı birleştirip tek bir çelik nesne yapıyoruz kanka:
-                const dependentData = {
-                  ...rDependent,
-                  ...fDependent,
-                  // Eğer fDependent içinde sadece photos kaldıysa, isim gibi kritik alanları ham veriden koruyoruz:
-                  name: fDependent.name || rDependent.name || firestoreData.name || rawData.name || '',
-                  gender: fDependent.gender || rDependent.gender || firestoreData.gender || rawData.gender || '',
-                  note: fDependent.note || rDependent.note || firestoreData.note || rawData.note || '',
-                  chipNumber: fDependent.chipNumber || rDependent.chipNumber || firestoreData.chipNumber || rawData.chipNumber || '',
-                  bloodType: fDependent.bloodType || rDependent.bloodType || firestoreData.bloodType || rawData.bloodType || '',
-                  heightWeight: fDependent.heightWeight || rDependent.heightWeight || firestoreData.heightWeight || rawData.heightWeight || '',
-                  category: fDependent.category || rDependent.category || firestoreData.category || rawData.category || '',
-                  type: fDependent.type || rDependent.type || firestoreData.type || rawData.type || '',
-                  age: fDependent.age || rDependent.age || firestoreData.age || rawData.age || ''
-                };
-                
-                if (isMounted && dependentData.name) {
-                  setDependentName(String(dependentData.name));
-                  setDependentGender(String(dependentData.gender));
-                  setDependentNote(String(dependentData.note));
-                  setDependentChipNumber(String(dependentData.chipNumber));
-                  setDependentBloodType(String(dependentData.bloodType));
-                  setDependentHeightWeight(String(dependentData.heightWeight));
+                if (isMounted) {
+                  // BILADER: Veritabanından gelen bu orijinal ham bağımlı verisini akıllı belleğe yedekliyoruz kanka:
+                  dbBackupRef.current = { ...fDep };
+
+                  setDependentName(String(fDep.name || rDep.name || firestoreData.name || rawData.name || ''));
+                  setDependentChipNumber(String(fDep.chipNumber || rDep.chipNumber || firestoreData.chipNumber || rawData.chipNumber || ''));
+                  setDependentNote(String(fDep.note || rDep.note || firestoreData.note || rawData.note || ''));
+                  setDependentGender(String(fDep.gender || rDep.gender || firestoreData.gender || rawData.gender || ''));
+                  setDependentBloodType(String(fDep.bloodType || rDep.bloodType || firestoreData.bloodType || rawData.bloodType || ''));
+                  setDependentHeightWeight(String(fDep.heightWeight || rDep.heightWeight || firestoreData.heightWeight || rawData.heightWeight || ''));
 
                   // Dinamik Tür ve Kategori Tespiti
-                  let currentType = String(dependentData.category || dependentData.type || '');
+                  let currentType = String(fDep.category || fDep.type || rDep.category || rDep.type || firestoreData.category || firestoreData.type || rawData.category || rawData.type || '');
 
                   if (currentType && currentType !== 'Çocuk' && currentType !== 'Yaşlı') {
                     setDependentType('Evcil Hayvan');
-                    setDependentSubCategory(currentType);
+                    setDependentSubCategory(currentType); 
                   } else {
                     setDependentType(currentType);
                     setDependentSubCategory('');
                   }
 
-                  // YAŞ TEMİZLEME MOTORU
-                  if (dependentData.age) {
-                    const cleanAge = String(dependentData.age)
+                  // Yaş Verisi Geri Yükleme
+                  const rawAge = fDep.age || rDep.age || firestoreData.age || rawData.age || '';
+                  if (rawAge) {
+                    const cleanAge = String(rawAge)
                       .replace('Yaş', '')
                       .replace('yaş', '')
                       .replace('Yaşında', '')
@@ -170,12 +150,16 @@ export default function ProfileSetupScreen({ navigation }: any) {
                   }
                 }
                 
-                console.log("Tüm bağımlı ve veli state'leri akıllıca harmanlanıp hafızaya kazındı!");
+                console.log("Tüm bağımlı ve veli state'leri başarıyla harmanlandı!");
               }
             }
           }
         } catch (fetchErr) {
           console.error("Ayarlar modu esnek veri çekme hatası:", fetchErr);
+        } finally {
+          if (isMounted) {
+            setIsDataLoading(false);
+          }
         }
 
         if (isMounted) setCheckingProfile(false);
@@ -203,7 +187,10 @@ export default function ProfileSetupScreen({ navigation }: any) {
         console.error("Giriş koruması hatası kanka:", err);
       }
       
-      if (isMounted) setCheckingProfile(false);
+      if (isMounted) {
+        setCheckingProfile(false);
+        setIsDataLoading(false);
+      }
     };
 
     bypassIfProfileExists();
@@ -229,142 +216,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
       setParentDistrict('');
     }
   }, [parentCity]);
-
-  // --- TÜR DEĞİŞİNCE AKILLI FORM RESETLEME MOTORU (HAYALET VERİ ENGELLEYİCİLİ) ---
-  const handleTypeChangeReset = async () => {
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
-
-      const profileRef = doc(db, "profiles", currentUser.uid);
-      const profileSnap = await getDoc(profileRef);
-
-      if (profileSnap.exists()) {
-        const rawData = profileSnap.data();
-        const firestoreData = rawData.finalData ? rawData.finalData : rawData;
-        const originalDependent = firestoreData.dependent ? firestoreData.dependent : (rawData.dependent ? rawData.dependent : firestoreData);
-        
-        const originalType = String(originalDependent?.category || originalDependent?.type || '');
-
-        const isReturningToPet = dependentType === 'Evcil Hayvan' && (originalType === 'Kedi' || originalType === 'Köpek');
-        const isSameType = dependentType === originalType;
-
-        if (!isSameType && !isReturningToPet) {
-          console.log(`[Senkron Temizlik] Tür ${dependentType} olarak değişti, hayalet veriler temizleniyor...`);
-          setDependentName('');
-          setDependentAge('');
-          setDependentGender('');
-          setDependentHeightWeight('');
-          setDependentBloodType('');
-          setDependentNote('');
-          setDependentChipNumber('');
-        } 
-        else if (isSameType || isReturningToPet) {
-          console.log("[Geri Yükleme] Orijinal türe dönüldü, Firebase verileri hafızaya geri yazılıyor...");
-          setDependentName(String(originalDependent?.name || ''));
-          setDependentGender(String(originalDependent?.gender || ''));
-          setDependentNote(String(originalDependent?.note || ''));
-          setDependentChipNumber(String(originalDependent?.chipNumber || ''));
-          setDependentBloodType(String(originalDependent?.bloodType || ''));
-          setDependentHeightWeight(String(originalDependent?.heightWeight || ''));
-
-          if (originalDependent?.age) {
-            const rawAge = String(originalDependent.age);
-            const cleanAge = rawAge.toLowerCase().includes('yaş') 
-              ? rawAge.replace(/yaş/i, '').trim() 
-              : rawAge.trim();
-            
-            setDependentAge(isNaN(Number(cleanAge)) ? '' : cleanAge);
-          } else {
-            setDependentAge('');
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Tür değişim reset motoru hatası:", err);
-    }
-  };
-
-  // KANKA: Ekran adım korumalı ve hızlı basış engelleme zırhlı reset/geri yükleme motoru!
-  useEffect(() => {
-    let isCurrentRequestActive = true;
-
-    const handleTypeChangeResetWithLock = async () => {
-      try {
-        if (!dependentType) return;
-        if (step !== 2) return;
-        
-        setIsResetting(true);
-        
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          setIsResetting(false);
-          return;
-        }
-
-        const profileRef = doc(db, "profiles", currentUser.uid);
-        const profileSnap = await getDoc(profileRef);
-
-        if (!isCurrentRequestActive) {
-          return;
-        }
-
-        if (profileSnap.exists()) {
-          const rawData = profileSnap.data();
-          const firestoreData = rawData.finalData ? rawData.finalData : rawData;
-          const originalDependent = firestoreData.dependent ? firestoreData.dependent : firestoreData;
-          
-          const originalType = String(originalDependent?.category || originalDependent?.type || '');
-
-          const isReturningToPet = dependentType === 'Evcil Hayvan' && (originalType === 'Kedi' || originalType === 'Köpek');
-          const isSameType = dependentType === originalType;
-
-          if (!isSameType && !isReturningToPet) {
-            console.log(`[Senkron Temizlik] Tür ${dependentType} olarak değişti, hayalet veriler temizleniyor...`);
-            setDependentName('');
-            setDependentAge('');
-            setDependentGender('');
-            setDependentHeightWeight('');
-            setDependentBloodType('');
-            setDependentNote('');
-            setDependentChipNumber('');
-          } 
-          else if (isSameType || isReturningToPet) {
-            console.log("[Geri Yükleme] Orijinal türe dönüldü, Firebase verileri hafızaya geri yazılıyor...");
-            setDependentName(String(originalDependent?.name || ''));
-            setDependentGender(String(originalDependent?.gender || ''));
-            setDependentNote(String(originalDependent?.note || ''));
-            setDependentChipNumber(String(originalDependent?.chipNumber || ''));
-            setDependentBloodType(String(originalDependent?.bloodType || ''));
-            setDependentHeightWeight(String(originalDependent?.heightWeight || ''));
-
-            if (originalDependent?.age) {
-              const rawAge = String(originalDependent.age);
-              const cleanAge = rawAge.toLowerCase().includes('yaş') 
-                ? rawAge.replace(/yaş/i, '').trim() 
-                : rawAge.trim();
-              
-              setDependentAge(isNaN(Number(cleanAge)) ? '' : cleanAge);
-            } else {
-              setDependentAge('');
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Tür değişim reset motoru hatası:", err);
-      } finally {
-        // İşlem bitti, kilidi güvenle açıyoruz!
-        setIsResetting(false);
-      }
-    };
-
-    handleTypeChangeResetWithLock();
-
-    return () => {
-      isCurrentRequestActive = false;
-    };
-    // Bağımlılık dizisine step'i de ekliyoruz ki step 2 olduğu an Kadir'in verileri jilet gibi yüklensin kanka!
-  }, [dependentType, step]);
 
   // =========================================================================
   // 3. YARDIMCI FONKSİYONLAR (NOTIFY, NEXT, SAVE)
@@ -393,16 +244,12 @@ export default function ProfileSetupScreen({ navigation }: any) {
       return;
     }
 
-    // === KANKA FOTOĞRAF SEÇİLMİŞSE FİREBASE STORAGE'A FİRE YAPMAYAN YÜKLEME MOTORU ===
-    // Kanka, eğer yeni fotoğraf seçilmediyse veritabanındaki mevcut photoUrl'i koruyoruz:
     let uploadedPhotoUrl = photoUri || '';
 
-    // Kanka: photoUri'nin gerçekten yerel bir dosya barındırdığından (boş olmadığından ve http ile başlamadığından) emin oluyoruz
     if (photoUri && photoUri.trim() !== "" && !photoUri.startsWith('http') && (photoUri.startsWith('file://') || photoUri.startsWith('content://') || photoUri.startsWith('/'))) {
       try {
         console.log("Profil fotoğrafı Firebase Storage'a fırlatılıyor...");
         
-        // Yerel dosya yolunu (file://) sorunsuzca ham binary veriye (blob) çeviriyoruz kanka
         const blob: Blob = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.onload = function () {
@@ -420,40 +267,33 @@ export default function ProfileSetupScreen({ navigation }: any) {
         const currentUser = auth.currentUser;
         
         if (currentUser) {
-          // Resmi profile_photos klasörüne kullanıcının UID'si ile mühürlüyoruz
           const fileRef = ref(storage, `profile_photos/${currentUser.uid}.jpg`);
           await uploadBytes(fileRef, blob);
           
-          // Hafıza şişmesin diye işimiz bitince blob'u kapatıyoruz kanka (TypeScript korumalı)
           if (blob && typeof (blob as any).close === 'function') {
             (blob as any).close();
           }
           
-          uploadedPhotoUrl = await getDownloadURL(fileRef); // İşte o aradığımız internet linki!
+          uploadedPhotoUrl = await getDownloadURL(fileRef);
           console.log("Fotoğraf başarıyla Storage'a yüklendi, URL:", uploadedPhotoUrl);
         }
       } catch (imgErr) {
         console.error("Storage fotoğraf yükleme hatası kanka:", imgErr);
-        // Fotoğraf yüklenemezse bile kayıt işlemi yarıda kalmasın, mevcut url ile devam etsin:
         uploadedPhotoUrl = photoUri || '';
       }
-    } else {
-      console.log("Geçerli yeni bir yerel fotoğraf URI'si algılanmadı, Storage adımı güvenle atlandı kanka.");
     }
 
-    // === KANKA TÜM VERİLERİ SÜTUN SÜTUN EKSİKSİZ VERİTABANINA YAZAN YENİ PAKET ===
     const finalData = {
       dependent: {
-        // KANKA: Eğer yukarıdaki ana buton Evcil Hayvan ise veritabanına alt türü (Kedi, Köpek vs.) yazıyoruz, Çocuk/Yaşlı ise direkt kendilerini yazıyoruz:
         type: (dependentType === 'Evcil Hayvan') ? dependentSubCategory : dependentType,
         category: (dependentType === 'Evcil Hayvan') ? dependentSubCategory : dependentType,
         name: dependentName,
         age: dependentAge ? `${dependentAge} Yaş` : '',
         gender: dependentGender || 'Erkek',
-        chipNumber: dependentChipNumber || '',
+        chipNumber: (dependentType === 'Evcil Hayvan') ? dependentChipNumber : '',
         note: dependentNote || '',
-        heightWeight: dependentHeightWeight || '', // Boy - Kilo birleşik string kanka
-        bloodType: dependentBloodType || '' // Çocuğun/Yaşlının kan grubu
+        heightWeight: (dependentType !== 'Evcil Hayvan') ? dependentHeightWeight : '',
+        bloodType: (dependentType !== 'Evcil Hayvan') ? dependentBloodType : ''
       },
       parent: {
         name: parentName || '',
@@ -466,15 +306,11 @@ export default function ProfileSetupScreen({ navigation }: any) {
         age: parentAge || '',
         bloodType: parentBloodType || '',
         note: parentNote || '',
-        // KANKA BÜYÜK YENİLİK: Fotoğraf linkini veli nesnesinin içine mühürledik!
         photoUrl: uploadedPhotoUrl || ''
       }
     };
 
-    console.log("Sisteme işlenecek paket (Fotoğraflı):", JSON.stringify(finalData));
-
     try {
-      // Sizin kendi veritabanı kayıt tetikleyiciniz kanka, aynen devam:
       await saveProfileToFirebase(finalData); 
       notify('Başarılı', 'Profil bilgileriniz sisteme başarıyla kaydedilmiştir.');
       navigation.navigate('Home');
@@ -482,18 +318,15 @@ export default function ProfileSetupScreen({ navigation }: any) {
       console.error("Profil arayüz yönlendirme hatası:", error);
       navigation.navigate('Home'); 
     }
-  }; // <--- ÜSTTEKİ ANA FONKSİYONUN KAPANIŞI BURASI KANKA
+  };
 
-  // === SON KULLANICI DOSTU PROFİL FOTOĞRAFI SEÇİCİSİ ===
   const pickPhoto = async () => {
-    // 1. Galeri izin kontrolü
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       alert('Profil fotoğrafı ekleyebilmek için lütfen cihazınızın ayarlarından galeri erişimine izin verin.');
       return;
     }
 
-    // 2. Galeriyi açma motoru
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsEditing: true,
@@ -507,7 +340,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
     }
   };
 
-  // --- KORUMA AKTİFKEN LOADING EKRANI ---
   if (checkingProfile) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' }}>
@@ -516,35 +348,23 @@ export default function ProfileSetupScreen({ navigation }: any) {
     );
   }
 
-  // =========================================================================
-  // 4. ARAYÜZ (JSX) GÖVDESİ
-  // =========================================================================
   return (
     <View style={{ flex: 1 }}>
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>NFCTT Profil Kurulumu</Text>
           
-          {/* ================= VELİ PROFİL FOTOĞRAFI ALANI ================= */}
-        <TouchableOpacity 
-          // KANKA: Eğer 2. adımdaysak (Dependent) veya arkada reset motoru çalışıyorsa fotoğraf seçiciyi KİLİTLE!
-          disabled={step === 2 || isResetting} 
-          style={[
-            styles.profilePhotoContainer,
-            // Kanka: ternary formatına çektik, step 2 değilse güvenle boş nesne döner, TypeScript asla ötmez:
-            step === 2 ? { opacity: 0.85 } : {}
-          ]}
-          onPress={pickPhoto}
-        >
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.profilePhoto} />
-          ) : (
-            <Image 
-              source={require('../../assets/default-avatar.png')}
-              style={styles.profilePhoto} 
-            />
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity 
+            disabled={step === 2 || isResetting} 
+            style={[styles.profilePhotoContainer, step === 2 ? { opacity: 0.85 } : {}]}
+            onPress={pickPhoto}
+          >
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.profilePhoto} />
+            ) : (
+              <Image source={require('../../assets/default-avatar.png')} style={styles.profilePhoto} />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* ADIM 1: VELİ BİLGİLERİ */}
@@ -592,7 +412,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
               </Picker>
             </View>
 
-            {/* İL SEÇİMİ */}
             <Text style={styles.inputLabel}>İl *</Text>
             <View style={styles.pickerContainer}>
               <Picker selectedValue={parentCity} onValueChange={(itemValue) => setParentCity(itemValue)}>
@@ -603,7 +422,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
               </Picker>
             </View>
 
-            {/* İLÇE SEÇİMİ */}
             <Text style={styles.inputLabel}>İlçe *</Text>
             <View style={styles.pickerContainer}>
               <Picker selectedValue={parentDistrict} onValueChange={(itemValue) => setParentDistrict(itemValue)} enabled={parentCity !== ''}>
@@ -622,6 +440,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
         )}
+
         {/* ADIM 2: BAĞIMLI CANLI BİLGİLERİ */}
         {step === 2 && (
           <View style={styles.card}>
@@ -632,16 +451,57 @@ export default function ProfileSetupScreen({ navigation }: any) {
               {['Çocuk', 'Evcil Hayvan', 'Yaşlı'].map((type) => (
                 <TouchableOpacity 
                   key={type}
-                  // KANKA: Arka planda resetleme motoru çalışırken butonları fiziksel olarak kilitliyoruz!
                   disabled={isResetting}
                   style={[
                     styles.typeButton, 
-                    (dependentType === type || (type === 'Evcil Hayvan' && (dependentType === 'Kedi' || dependentType === 'Köpek' || dependentType === 'Kuş' || dependentType === 'Kemirgen' || dependentType === 'Sürüngen/Akvaryum' || dependentType === 'Diğer'))) && styles.typeButtonSelected,
-                    // Kilitliyken butonu hafif flulaştır kanka:
-                    isResetting && { opacity: 0.6 }
+                    (dependentType === type || (type === 'Evcil Hayvan' && (dependentType === 'Kedi' || dependentType === 'Köpek' || dependentType === 'Kuş' || dependentType === 'Kemirgen' || dependentType === 'Sürüngen/Akvaryum' || dependentType === 'Diğer'))) && styles.typeButtonSelected
                   ]}
-                  // Kanka direkt setDependentType tetikliyoruz, useEffect motoru hayalet verileri anında uçuruyor!
-                  onPress={() => setDependentType(type)}
+                  // BILADER: GEZİNİP GERİ GELİNDİĞİNDE VERİLERİ ÇELİK REFERANSTAN SİHRİBBAZ GİBİ GERİ YÜKLEYEN MOTOR!
+                  onPress={async () => {
+                    setDependentType(type);
+
+                    // Orijinal veritabanı türünü referans nesnesinden deşifre ediyoruz kanka:
+                    const originalDependent = dbBackupRef.current || {};
+                    const originalType = String(originalDependent?.category || originalDependent?.type || '');
+                    
+                    const isChildOrElderlyMatch = (originalType === 'Çocuk' || originalType === 'Yaşlı') && type === originalType;
+                    const isPetMatch = (originalType !== 'Çocuk' && originalType !== 'Yaşlı' && originalType !== '') && type === 'Evcil Hayvan';
+                    const isSameType = isChildOrElderlyMatch || isPetMatch;
+
+                    // SENARYO A: Kullanıcı veritabanında KAYITLI OLAN KENDİ ORİJİNAL BUTONUNA geri döndüyse -> HAFIZADAN BAS GERİ!
+                    if (isSameType) {
+                      console.log("[UX Hafıza Motoru] Orijinal butona geri dönüldü, yedek veriler şak diye basılıyor...");
+                      setDependentName(String(originalDependent?.name || ''));
+                      setDependentGender(String(originalDependent?.gender || ''));
+                      setDependentNote(String(originalDependent?.note || ''));
+                      setDependentChipNumber(String(originalDependent?.chipNumber || ''));
+                      setDependentBloodType(String(originalDependent?.bloodType || ''));
+                      setDependentHeightWeight(String(originalDependent?.heightWeight || ''));
+
+                      if (originalDependent?.age) {
+                        const cleanAge = String(originalDependent.age).replace(/yaş/i, '').trim();
+                        setDependentAge(isNaN(Number(cleanAge)) ? '' : cleanAge);
+                      } else {
+                        setDependentAge('');
+                      }
+
+                      if (originalType !== 'Çocuk' && originalType !== 'Yaşlı') {
+                        setDependentSubCategory(originalType);
+                      }
+                    } 
+                    // SENARYO B: Kullanıcı boş olan veya kendisinde kayıtlı olmayan farklı bir türe tıkladıysa -> ALANLARI SIFIRLA!
+                    else {
+                      console.log(`[UX Hafıza Motoru] Farklı bir türe geçildi (${type}), alanlar sıfırlanıyor...`);
+                      setDependentName('');
+                      setDependentAge('');
+                      setDependentGender('');
+                      setDependentHeightWeight('');
+                      setDependentBloodType('');
+                      setDependentNote('');
+                      setDependentChipNumber('');
+                      setDependentSubCategory('');
+                    }
+                  }}
                 >
                   <Text style={[
                     styles.typeButtonText, 
@@ -664,38 +524,30 @@ export default function ProfileSetupScreen({ navigation }: any) {
                   value={dependentName} 
                 />
 
-                {/* EVCİL HAYVAN ALT TÜR SEÇİMİ */}
-        {(dependentType === 'Evcil Hayvan' || dependentType === 'Kedi' || dependentType === 'Köpek') && (
-          <View>
-            <Text style={styles.inputLabel}>Evcil Hayvan Türü</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={dependentSubCategory}
-                onValueChange={(itemValue) => {
-                  if (itemValue) {
-                    setDependentSubCategory(itemValue);
-                  }
-                }}
-              >
-                <Picker.Item label="Seçiniz" value="" />
-                <Picker.Item label="Kedi" value="Kedi" />
-                <Picker.Item label="Köpek" value="Köpek" />
-                <Picker.Item label="Kuş" value="Kuş" />
-                <Picker.Item label="Kemirgen (Hamster, Tavşan vb.)" value="Kemirgen" />
-                <Picker.Item label="Sürüngen / Akvaryum" value="Sürüngen/Akvaryum" />
-                <Picker.Item label="Diğer" value="Diğer" />
-              </Picker>
-            </View>
-          </View>
-        )}
+                {(dependentType === 'Evcil Hayvan' || dependentType === 'Kedi' || dependentType === 'Köpek') && (
+                  <View>
+                    <Text style={styles.inputLabel}>Evcil Hayvan Türü</Text>
+                    <View style={styles.pickerContainer}>
+                      <Picker
+                        selectedValue={dependentSubCategory}
+                        onValueChange={(itemValue) => setDependentSubCategory(itemValue)}
+                      >
+                        <Picker.Item label="Seçiniz" value="" />
+                        <Picker.Item label="Kedi" value="Kedi" />
+                        <Picker.Item label="Köpek" value="Köpek" />
+                        <Picker.Item label="Kuş" value="Kuş" />
+                        <Picker.Item label="Kemirgen (Hamster, Tavşan vb.)" value="Kemirgen" />
+                        <Picker.Item label="Sürüngen / Akvaryum" value="Sürüngen/Akvaryum" />
+                        <Picker.Item label="Diğer" value="Diğer" />
+                      </Picker>
+                    </View>
+                  </View>
+                )}
 
-                {/* ORTAK ALAN: YAŞ */}
                 <Text style={styles.inputLabel}>Yaş</Text>
-                {/* KANKA: Eğer evcil hayvan türleriyse sadece bu bağımsız Picker çizilir (0-30 arası): */}
                 {(dependentType === 'Evcil Hayvan' || dependentType === 'Kedi' || dependentType === 'Köpek' || dependentType === 'Kuş' || dependentType === 'Kemirgen' || dependentType === 'Sürüngen/Akvaryum' || dependentType === 'Diğer') ? (
-                  <View style={styles.pickerContainer} key="pet-age-picker-container">
+                  <View style={styles.pickerContainer}>
                     <Picker 
-                      key="pet-age-picker"
                       selectedValue={dependentAge || ''} 
                       onValueChange={(itemValue) => setDependentAge(itemValue)}
                     >
@@ -706,10 +558,8 @@ export default function ProfileSetupScreen({ navigation }: any) {
                     </Picker>
                   </View>
                 ) : (
-                  /* KANKA: Eğer Çocuk veya Yaşlı ise bu tamamen bağımsız ikinci Picker çizilir (0-100 arası): */
-                  <View style={styles.pickerContainer} key="human-age-picker-container">
+                  <View style={styles.pickerContainer}>
                     <Picker 
-                      key="human-age-picker"
                       selectedValue={dependentAge || ''} 
                       onValueChange={(itemValue) => setDependentAge(itemValue)}
                     >
@@ -721,7 +571,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
                   </View>
                 )}
 
-                {/* ================= CİNSİYET PICKER ================= */}
                 <Text style={styles.inputLabel}>Cinsiyet</Text>
                 <View style={styles.pickerContainer}>
                   <Picker 
@@ -731,32 +580,25 @@ export default function ProfileSetupScreen({ navigation }: any) {
                     <Picker.Item label="Seçiniz" value="" />
                     <Picker.Item label="Erkek" value="Erkek" />
                     
-                    {/* Evcil Hayvan türleri ise Dişi seçeneği gelir kanka */}
                     {(dependentType === 'Evcil Hayvan' || dependentType === 'Kedi' || dependentType === 'Köpek' || dependentType === 'Kuş' || dependentType === 'Kemirgen' || dependentType === 'Sürüngen/Akvaryum' || dependentType === 'Diğer') ? (
                       <Picker.Item label="Dişi" value="Dişi" />
                     ) : null}
 
-                    {/* Çocuk veya Yaşlı ise Kadın seçeneği gelir kanka */}
                     {(dependentType === 'Çocuk' || dependentType === 'Yaşlı') ? (
                       <Picker.Item label="Kadın" value="Kadın" />
                     ) : null}
 
-                    {/* Sadece YAŞLI seçildiğinde Belirtmek İstemiyorum aktif olur kanka */}
                     {dependentType === 'Yaşlı' ? (
                       <Picker.Item label="Belirtmek İstemiyorum" value="Belirtmek İstemiyorum" />
                     ) : null}
                   </Picker>
                 </View>
 
-               {/* İNSANA ÖZEL SORGULAR (BOY / KİLO / KAN GRUBU) */}
                 {(dependentType === 'Çocuk' || dependentType === 'Yaşlı') && (
-                  <View key={`human-size-block-${dependentType}`}>
-                    
+                  <View>
                     <Text style={styles.inputLabel}>Boy</Text>
-                    {/* KANKA: Boy Picker konteynerine özel key zırhı: */}
-                    <View style={styles.pickerContainer} key={`human-height-container-${dependentType}`}>
+                    <View style={styles.pickerContainer}>
                       <Picker
-                        key={`human-height-picker-${dependentType}`}
                         selectedValue={(dependentHeightWeight && dependentHeightWeight.includes(' - ')) ? dependentHeightWeight.split(' - ')[0] : ''}
                         onValueChange={(itemValue) => {
                           const currentWeight = (dependentHeightWeight && dependentHeightWeight.includes(' - ')) ? dependentHeightWeight.split(' - ')[1] || '' : '';
@@ -771,10 +613,8 @@ export default function ProfileSetupScreen({ navigation }: any) {
                     </View>
 
                     <Text style={styles.inputLabel}>Kilo</Text>
-                    {/* KANKA: Kilo Picker konteynerine özel key zırhı: */}
-                    <View style={styles.pickerContainer} key={`human-weight-container-${dependentType}`}>
+                    <View style={styles.pickerContainer}>
                       <Picker
-                        key={`human-weight-picker-${dependentType}`}
                         selectedValue={(dependentHeightWeight && dependentHeightWeight.includes(' - ')) ? dependentHeightWeight.split(' - ')[1] : ''}
                         onValueChange={(itemValue) => {
                           const currentHeight = (dependentHeightWeight && dependentHeightWeight.includes(' - ')) ? dependentHeightWeight.split(' - ')[0] || '' : '';
@@ -805,20 +645,18 @@ export default function ProfileSetupScreen({ navigation }: any) {
                   </View>
                 )}
 
-                {/* HAYVANA ÖZEL SORGULAR: ÇİP NUMARASI */}
                 {(dependentType === 'Evcil Hayvan' || dependentType === 'Kedi' || dependentType === 'Köpek' || dependentType === 'Kuş' || dependentType === 'Kemirgen' || dependentType === 'Sürüngen/Akvaryum' || dependentType === 'Diğer') && (
                   <View>
                     <Text style={styles.inputLabel}>Aşı veya Çip Numarası</Text>
                     <TextInput
                       placeholder="Aşı veya Çip Numarası (Varsa)"
                       style={styles.input}
-                      onChangeText={(text) => setDependentChipNumber(text)}
+                      onChangeText={setDependentChipNumber}
                       value={dependentChipNumber} 
                     />
                   </View>
                 )}
 
-                {/* ORTAK ALAN: EK NOT */}
                 <TextInput 
                   placeholder={
                     (dependentType === 'Evcil Hayvan' || dependentType === 'Kedi' || dependentType === 'Köpek' || dependentType === 'Kuş' || dependentType === 'Kemirgen')
@@ -831,7 +669,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
                   value={dependentNote} 
                 />
 
-                {/* AKSİYON BUTONLARI */}
                 <View style={styles.actionButtons}>
                   <TouchableOpacity style={styles.secondaryButton} onPress={() => setStep(1)}>
                     <Text style={{ color: '#444', fontWeight: 'bold' }}>← Geri Dön</Text>
@@ -847,68 +684,13 @@ export default function ProfileSetupScreen({ navigation }: any) {
         )}
       </ScrollView>
 
-      {/* ================= HOME.TSX İLE %100 UYUMLU NAVİGASYON BARI ================= */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={[styles.barItem, { opacity: 0.5 }]} disabled={true}>
-          <Text style={styles.barIcon}>⚙️</Text>
-          <Text style={styles.barText}>Ayarlar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.nfcBarItem} onPress={() => console.log("NFC Tarama tetiklendi...")}>
-          <View style={styles.nfcCircle}>
-            <Text style={styles.nfcIcon}>📶</Text>
-          </View>
-          <Text style={[styles.barText, { marginTop: 4, fontWeight: 'bold', color: '#007AFF' }]}>NFC Tarat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.barItem} onPress={() => navigation.navigate('Home')}>
-          <Text style={styles.barIcon}>👤</Text>
-          <Text style={styles.barText}>Profilim</Text>
-        </TouchableOpacity>
-      </View>
+      {/* ================= NEW COMPONENT BOTTOM BAR ================= */}
+      <BottomBar navigation={navigation} activeScreen="Settings" />
     </View>
   );
 }
 
-// =========================================================================
-// 5. STYLESHEET ALANI
-// =========================================================================
 const styles = StyleSheet.create({
-  bottomBar: { 
-    flexDirection: 'row', 
-    height: Platform.OS === 'ios' ? 90 : 75, 
-    backgroundColor: 'white', 
-    borderTopWidth: 1, 
-    borderColor: '#eee', 
-    justifyContent: 'space-around', 
-    alignItems: 'center', 
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
-    position: 'absolute', 
-    bottom: 0,
-    left: 0,
-    right: 0
-  },
-  barItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-  barIcon: { fontSize: 24, marginBottom: 3 },
-  barText: { fontSize: 12, color: '#555' },
-  nfcBarItem: { alignItems: 'center', justifyContent: 'center', flex: 1, marginTop: -25 },
-  nfcCircle: { 
-    width: 60, 
-    height: 60, 
-    borderRadius: 30, 
-    backgroundColor: 'white', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.15, 
-    shadowRadius: 5, 
-    elevation: 6, 
-    borderWidth: 1, 
-    borderColor: '#eee' 
-  },
-  nfcIcon: { fontSize: 28 },
-
   container: { flex: 1, backgroundColor: '#f0f2f5', padding: 15 },
   header: { 
     flexDirection: 'row', 
@@ -930,7 +712,6 @@ const styles = StyleSheet.create({
     borderColor: '#007AFF'
   },
   profilePhoto: { width: '100%', height: '100%' },
-  photoPlaceholderText: { fontSize: 10, color: '#666', textAlign: 'center' },
   card: { 
     backgroundColor: 'white', 
     padding: 20, 
@@ -956,20 +737,6 @@ const styles = StyleSheet.create({
   secondaryButton: { backgroundColor: '#e0e0e0', padding: 15, borderRadius: 10, alignItems: 'center', flex: 1 },
   buttonText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
   actionButtons: { flexDirection: 'row', gap: 10, marginTop: 15, alignItems: 'center' },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#555',
-    marginBottom: 6,
-    marginTop: 8,
-  },
-  pickerContainer: {
-    backgroundColor: '#f9f9f9', 
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee', 
-    marginBottom: 12,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  }
+  inputLabel: { fontSize: 14, fontWeight: 'bold', color: '#555', marginBottom: 6, marginTop: 8 },
+  pickerContainer: { backgroundColor: '#f9f9f9', borderRadius: 8, borderWidth: 1, borderColor: '#eee', marginBottom: 12, overflow: 'hidden', justifyContent: 'center' }
 });

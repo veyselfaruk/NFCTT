@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebaseConfig'; 
 // KANKA: Sadece signOut motorunu çekiyoruz, getAuth kırıntısı tamamen temizlendi!
 import { signOut } from 'firebase/auth'; 
-
+import BottomBar from '../components/BottomBar';
 export default function HomeScreen({ navigation }: any) {
   // Canlı bildirim durumunu simüle eden state
   const [activeAlert, setActiveAlert] = useState<any>(null);
@@ -82,36 +82,8 @@ export default function HomeScreen({ navigation }: any) {
         )}
       </ScrollView>
 
-      {/* 3. ALT KISIM: ALT ŞERİT (BOTTOM BAR - ESKİ ORİJİNAL HALİ) */}
-      <View style={styles.bottomBar}>
-        
-        {/* SOL: AYARLAR */}
-        <TouchableOpacity 
-          style={styles.barItem} 
-          onPress={() => navigation.navigate('ProfileSetup', { isUpdating: true })}
-        >
-          <Text style={styles.barIcon}>⚙️</Text>
-          <Text style={styles.barText}>Ayarlar</Text>
-        </TouchableOpacity>
-
-        {/* ORTA: NFC OKUTMA BUTONU */}
-        <TouchableOpacity style={styles.nfcBarItem}>
-          <View style={styles.nfcCircle}>
-            <Text style={styles.nfcIcon}>📶</Text>
-          </View>
-          <Text style={[styles.barText, { marginTop: 4, fontWeight: 'bold', color: '#007AFF' }]}>NFC Tarat</Text>
-        </TouchableOpacity>
-
-        {/* SAĞ: PROFİLİM SEKMESİ (ARTIK AKTİF!) */}
-        <TouchableOpacity 
-          style={styles.barItem} 
-          onPress={() => navigation.navigate('ProfileScreen')} 
-        >
-          <Text style={styles.barIcon}>👤</Text>
-          <Text style={styles.barText}>Profilim</Text>
-        </TouchableOpacity>
-
-      </View>
+      {/* ================= NEW COMPONENT BOTTOM BAR ================= */}
+      <BottomBar navigation={navigation} activeScreen="Home" />
 
     </SafeAreaView>
   );
@@ -166,11 +138,4 @@ const styles = StyleSheet.create({
   actionButtonSecondary: { backgroundColor: 'white', padding: 14, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#c62828' },
   actionButtonText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
   actionButtonTextSecondary: { color: '#c62828', fontWeight: 'bold', fontSize: 15 },
-  bottomBar: { flexDirection: 'row', height: Platform.OS === 'ios' ? 90 : 75, backgroundColor: 'white', borderTopWidth: 1, borderColor: '#eee', justifyContent: 'space-around', alignItems: 'center', paddingBottom: Platform.OS === 'ios' ? 20 : 0 },
-  barItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-  barIcon: { fontSize: 24, marginBottom: 3 },
-  barText: { fontSize: 12, color: '#555' },
-  nfcBarItem: { alignItems: 'center', justifyContent: 'center', flex: 1, marginTop: -25 },
-  nfcCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 5, elevation: 6, borderWidth: 1, borderColor: '#eee' },
-  nfcIcon: { fontSize: 28 }
 });
