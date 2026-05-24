@@ -3,14 +3,29 @@
     "name": "NFCTT",
     "slug": "NFCTT",
     "version": "1.0.0",
-    "platforms": [
-      "ios",
-      "android",
-      "web"
-    ],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "NFCTT, kaybolan canlınızın tam konumunu bulucuyla paylaşabilmeniz ve harita üzerinde görebilmeniz için konum izni gerektirir biladerim."
+      }
+    },
     "android": {
-  "googleServicesFile": "./google-services.json",
-  "package": "com.nfctt"
-}
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    }
   }
 }

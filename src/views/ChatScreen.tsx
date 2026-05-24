@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, 
-  KeyboardAvoidingView, Platform, ActivityIndicator, SafeAreaView 
+  KeyboardAvoidingView, Platform, ActivityIndicator, SafeAreaView, Alert 
 } from 'react-native';
 import { auth, db } from '../config/firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
 
 interface Message {
   id: string;
   senderId: string;
   text: string;
   timestamp: any;
+  type?: 'text' | 'location';
+  latitude?: number;
+  longitude?: number;
 }
 
 export default function ChatScreen({ route, navigation }: any) {
@@ -20,10 +25,12 @@ export default function ChatScreen({ route, navigation }: any) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [locationLoading, setLocationLoading] = useState(false);
   
   const flatListRef = useRef<FlatList>(null);
   const currentUser = auth.currentUser;
 
+  // === ANLIK MESAJ DİNLEME MOTORU ===
   useEffect(() => {
     if (!chatId) return;
 
@@ -39,8 +46,11 @@ export default function ChatScreen({ route, navigation }: any) {
         fetchedMessages.push({
           id: docSnap.id,
           senderId: data.senderId,
-          text: data.text,
-          timestamp: data.timestamp
+          text: data.text || '',
+          timestamp: data.timestamp,
+          type: data.type || 'text',
+          latitude: data.latitude,
+          longitude: data.longitude
         });
       });
 
@@ -49,16 +59,15 @@ export default function ChatScreen({ route, navigation }: any) {
           id: 'welcome_static',
           senderId: 'system',
           text: 'Akıllı etiket sisteminiz aktif duruma getirilmiştir biladerim. Profil sayfasından bağımlı canlı bilgilerini ve albümünü eksiksiz doldurmayı unutma!',
-          timestamp: new Date()
+          timestamp: new Date(),
+          type: 'text'
         });
       }
 
       setMessages(fetchedMessages);
       setLoading(false);
 
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 100);
     }, (error) => {
       console.error("Mesajlar dinlenirken bulutta hata çıktı kanka:", error);
       setLoading(false);
@@ -67,13 +76,10 @@ export default function ChatScreen({ route, navigation }: any) {
     return unsubscribe;
   }, [chatId]);
 
+  // === METİN MESAJI GÖNDERME MOTORU ===
   const handleSendMessage = async () => {
     if (inputText.trim() === '' || !currentUser) return;
-    
-    if (chatId === 'system_welcome') {
-      setInputText('');
-      return;
-    }
+    if (chatId === 'system_welcome') { setInputText(''); return; }
 
     const messageToSend = inputText.trim();
     setInputText(''); 
@@ -82,20 +88,59 @@ export default function ChatScreen({ route, navigation }: any) {
       await addDoc(collection(db, "chats", chatId, "messages"), {
         senderId: currentUser.uid,
         text: messageToSend,
+        type: 'text',
         timestamp: serverTimestamp()
       });
 
-      const chatRef = doc(db, "chats", chatId);
-      await updateDoc(chatRef, {
+      await updateDoc(doc(db, "chats", chatId), {
         lastMessage: messageToSend,
         updatedAt: serverTimestamp()
       });
-
     } catch (error) {
       console.error("Mesaj gönderilirken hata oluştu kanka:", error);
     }
   };
 
+  // === CANLI KONUM ATMA MOTORU (BOMBASTİK ÖZELLİK) ===
+  const handleSendLocation = async () => {
+    if (chatId === 'system_welcome' || !currentUser) return;
+
+    // 1. Kullanıcıdan konum izni istiyoruz kanka
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('İzin Reddedildi', 'Konumunu paylaşmak için ayarlardan izin vermen gerekiyor biladerim.');
+      return;
+    }
+
+    setLocationLoading(true);
+    try {
+      // 2. GPS koordinatlarını anlık olarak çekiyoruz
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const { latitude, longitude } = location.coords;
+
+      // 3. Firestore'a konum tipiyle mühürlüyoruz kanka
+      await addDoc(collection(db, "chats", chatId, "messages"), {
+        senderId: currentUser.uid,
+        text: '📍 Konum paylaşıldı',
+        type: 'location',
+        latitude,
+        longitude,
+        timestamp: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, "chats", chatId), {
+        lastMessage: '📍 Konum paylaşıldı',
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Konum alınırken veya fırlatılırken hata çıktı kanka:", error);
+      Alert.alert('Hata', 'GPS verisi çekilemedi, tekrar dene biladerim.');
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  // === MESAJ BALONLARININ RENDER EDİLMESİ ===
   const renderMessageItem = ({ item }: { item: Message }) => {
     const isMyMessage = item.senderId === currentUser?.uid;
     const isSystem = item.senderId === 'system';
@@ -110,10 +155,34 @@ export default function ChatScreen({ route, navigation }: any) {
 
     return (
       <View style={[styles.messageWrapper, isMyMessage ? styles.myMessageWrapper : styles.otherMessageWrapper]}>
-        <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble]}>
-          <Text style={[styles.messageText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
-            {item.text}
-          </Text>
+        <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble, item.type === 'location' && styles.mapBubble]}>
+          {item.type === 'location' && item.latitude && item.longitude ? (
+            // KANKA: Eğer gelen mesaj bir konumsa balonun içine mini harita gömüyoruz!
+            <View style={styles.mapContainer}>
+              <MapView
+                style={styles.miniMap}
+                initialRegion={{
+                  latitude: item.latitude,
+                  longitude: item.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+                scrollEnabled={false}
+                zoomEnabled={false}
+                pitchEnabled={false}
+                rotateEnabled={false}
+              >
+                <Marker coordinate={{ latitude: item.latitude, longitude: item.longitude }} />
+              </MapView>
+              <Text style={[styles.mapText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
+                📍 Paylaşılan Konum
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.messageText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
+              {item.text}
+            </Text>
+          )}
         </View>
       </View>
     );
@@ -157,6 +226,19 @@ export default function ChatScreen({ route, navigation }: any) {
         {/* INPUT ALANI */}
         {chatId !== 'system_welcome' && (
           <View style={styles.inputContainer}>
+            {/* KANKA: Harita fırlatma pin butonunu buraya çaktık */}
+            <TouchableOpacity 
+              style={styles.locationButton} 
+              onPress={handleSendLocation}
+              disabled={locationLoading}
+            >
+              {locationLoading ? (
+                <ActivityIndicator size="small" color="#000000" />
+              ) : (
+                <Ionicons name="location-sharp" size={22} color="#000000" />
+              )}
+            </TouchableOpacity>
+
             <TextInput
               style={styles.input}
               placeholder="Mesajınızı yazın biladerim..."
@@ -182,7 +264,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center', 
     paddingHorizontal: 15, 
-    // KANKA: Android ve iOS çentiklerine çarpmaması için padding değerlerini mermiledik:
     paddingTop: Platform.OS === 'ios' ? 10 : 45, 
     paddingBottom: 15, 
     borderBottomWidth: 0.5, 
@@ -203,6 +284,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '75%', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20 },
   myBubble: { backgroundColor: '#000000', borderBottomRightRadius: 4 },
   otherBubble: { backgroundColor: '#f2f2f7', borderBottomLeftRadius: 4 },
+  mapBubble: { width: 240, paddingHorizontal: 0, paddingVertical: 0, overflow: 'hidden', borderRadius: 16 },
   
   messageText: { fontSize: 15, lineHeight: 20 },
   myMessageText: { color: '#ffffff' },
@@ -212,7 +294,12 @@ const styles = StyleSheet.create({
   systemMessageText: { fontSize: 13, color: '#666666', textAlign: 'center', lineHeight: 18 },
   
   inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderTopWidth: 0.5, borderColor: '#e5e5ea', backgroundColor: '#ffffff' },
+  locationButton: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', marginRight: 5 },
   input: { flex: 1, backgroundColor: '#f2f2f7', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, paddingRight: 40, fontSize: 15, color: '#000000', maxHeight: 100 },
   sendButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#000000', justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  mapContainer: { width: '100%', height: 180 },
+  miniMap: { width: '100%', height: 140 },
+  mapText: { padding: 10, fontSize: 13, fontWeight: '500', textAlign: 'center' }
 });

@@ -22,6 +22,14 @@ export default function ChatList({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<ChatSession[]>([]);
 
+  // KANKA: Ubeyde canlı test yönlendirme fonksiyonu tertemiz burada
+  const handleUbeydeTest = () => {
+    navigation.navigate('ChatScreen', { 
+      chatId: 'canli_test_odasi', 
+      title: 'Ubeyde (Canlı Test)' 
+    });
+  };
+  
   useEffect(() => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -144,6 +152,11 @@ export default function ChatList({ navigation }: any) {
         <Text style={styles.headerTitle}>💬 Mesajlar</Text>
       </View>
 
+      {/* KANKA: UBEYDE CANLI TEST SİNYAL BUTONU TAM BURADA */}
+      <TouchableOpacity style={styles.testButton} onPress={handleUbeydeTest}>
+        <Text style={styles.testButtonText}>🚀 UBEYDE İLE CANLI TEST SİNYALİ</Text>
+      </TouchableOpacity>
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#000000" />
@@ -197,5 +210,28 @@ const styles = StyleSheet.create({
   userName: { fontSize: 16, fontWeight: '600', color: '#000000' },
   chatTime: { fontSize: 12, color: '#8e8e93' },
   lastMessage: { fontSize: 14, color: '#8e8e93' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  
+  // KANKA: Minimalist premium siyah buton stilleri buraya mühürlendi
+  testButton: {
+    backgroundColor: '#000000',
+    marginHorizontal: 20,
+    marginTop: 15,
+    marginBottom: 5,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  testButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5
+  }
 });
