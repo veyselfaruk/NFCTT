@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getStorage } from 'firebase/storage'; // KANKA: Storage motoru import edildi
 import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
 
 // KANKA: createAsyncStorage yerine doğrudan ham AsyncStorage importunu çekiyoruz!
@@ -11,7 +11,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyC9h3VYZ-Ch40eaBH6dAJEApjD3Vg8VGHM", 
   authDomain: "nfc-tt-7c604.firebaseapp.com",
   projectId: "nfc-tt-7c604",
-  storageBucket: "nfc-tt-7c604.appspot.com",
+  storageBucket: "nfc-tt-7c604.firebasestorage.app",
   messagingSenderId: "32054488770", 
   appId: "1:32054488770:web:7331e60aeec19f6d857b5b"
 };
@@ -34,8 +34,8 @@ try {
   auth = getAuth(app);
 }
 
-// 3. Servisleri dışarı aktarıyoruz
+// 3. Servisleri başlatıp dışarı aktarıyoruz kanka
 const db = getFirestore(app);
-const storage = getStorage(app);
+const storage = getStorage(app); // KANKA: Storage mermi gibi buraya bağlandı
 
 export { app, auth, db, storage };

@@ -16,8 +16,10 @@ import { onAuthStateChanged } from 'firebase/auth';
 import LoginScreen from './src/screens/UniversalLoginScreen';
 import ProfileSetupScreen from './src/screens/ProfileSetupScreen';
 import HomeScreen from './src/views/Home';
-// KANKA: Yeni oluşturduğumuz şov ekranını tam buraya import ettik!
 import ProfileScreen from './src/screens/ProfileScreen'; 
+// KANKA: Navigasyonun tanımadığı o şanlı ChatList sayfasını buraya import ettik!
+import ChatList from './src/views/ChatList';
+import ChatScreen from './src/views/ChatScreen'; //  DOĞRU
 import { LogBox } from 'react-native';
 
 // KANKA: Firebase'in o hatalı ve inatçı AsyncStorage uyarısını terminalden tamamen gizliyoruz
@@ -56,12 +58,13 @@ const App = () => {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          // Giriş yapıldıysa önce Profil Kurulumu açılacak
+          // Giriş yapıldıysa korumalı ekranlar açılacak kanka
           <>
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
-            {/* KANKA: Yeni oluşturduğumuz Profil Gösterim ekranını buraya mühürledik */}
             <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+            <Stack.Screen name="ChatList" component={ChatList} />
+            <Stack.Screen name="ChatScreen" component={ChatScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

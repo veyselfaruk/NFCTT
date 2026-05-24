@@ -4,8 +4,9 @@ import {
   Image, Platform, ActivityIndicator, Animated, Dimensions, Modal, Alert
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { auth, db } from '../config/firebaseConfig';
+import { auth, db, storage } from '../config/firebaseConfig'; 
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; 
 import BottomBar from '../components/BottomBar';
 import { Ionicons } from '@expo/vector-icons'; 
 
@@ -14,6 +15,7 @@ const citiesAndDistricts = require('turkey-neighbourhoods');
 
 export default function ProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false); 
   const [profileData, setProfileData] = useState<any>(null);
   const [dependentPhotos, setDependentPhotos] = useState<string[]>([]);
   const [isAvatarExpanded, setIsAvatarExpanded] = useState(false);
@@ -72,9 +74,49 @@ export default function ProfileScreen({ navigation }: any) {
     setIsAvatarExpanded(!isAvatarExpanded);
   };
 
+  // === KALICI YÜKLEME MOTORU: SAF NATIVE XHR ILE BLOB DÖNÜŞÜMÜ ===
+  const uploadImageToStorage = async (uri: string, userUid: string) => {
+    // KANKA: Fetch bazen Android yerel dosya izinlerine takılabiliyor, XHR ile garantiye alıyoruz
+    const blob: any = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = function () {
+        resolve(xhr.response);
+      };
+      xhr.onerror = function (e) {
+        console.error("XHR Blob dönüşüm hatası kanka:", e);
+        reject(new TypeError("Network request failed"));
+      };
+      xhr.responseType = "blob";
+      xhr.open("GET", uri, true);
+      xhr.send(null);
+    });
+
+    try {
+      const filename = `gallery_${Date.now()}.jpg`;
+      const storageRef = ref(storage, `users/${userUid}/dependent_photos/${filename}`);
+      
+      // Storage'a yükleme işlemini başlatıyoruz
+      await uploadBytes(storageRef, blob);
+      
+      // Public HTTPS linkini geri döndürüyoruz
+      const downloadUrl = await getDownloadURL(storageRef);
+      
+      // İşlem bitince RAM sızıntısı olmasın diye blob'u kapatıyoruz kanka
+      blob.close();
+      
+      return downloadUrl;
+    } catch (error) {
+      blob.close();
+      throw error;
+    }
+  };
+
   // === YATAY GALERİYE YENİ FOTOĞRAF EKLEME MOTORU ===
   const handleAddDependentPhoto = async () => {
     if (dependentPhotos.length >= 6) return;
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
@@ -84,22 +126,25 @@ export default function ProfileScreen({ navigation }: any) {
     });
 
     if (!result.canceled && result.assets[0].uri) {
-      const newPhotoUri = result.assets[0].uri;
-      const updatedPhotos = [...dependentPhotos, newPhotoUri];
-      setDependentPhotos(updatedPhotos);
-
+      const localUri = result.assets[0].uri;
+      
       try {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          const profileRef = doc(db, "profiles", currentUser.uid);
-          await updateDoc(profileRef, {
-            "finalData.dependent.photos": updatedPhotos,
-            "dependentPhotos": updatedPhotos
-          });
-          console.log("Fotoğraf db üzerine başarıyla mühürlendi kanka.");
-        }
+        setUploading(true); 
+        const cloudUrl = await uploadImageToStorage(localUri, currentUser.uid);
+        const updatedPhotos = [...dependentPhotos, cloudUrl];
+        setDependentPhotos(updatedPhotos);
+
+        const profileRef = doc(db, "profiles", currentUser.uid);
+        await updateDoc(profileRef, {
+          "finalData.dependent.photos": updatedPhotos,
+          "dependentPhotos": updatedPhotos
+        });
+        console.log("Fotoğraf buluta uçuruldu ve URL db üzerine başarıyla mühürlendi kanka.");
       } catch (err) {
-        console.error("Fotoğraf senkronize edilemedi kanka:", err);
+        console.error("Fotoğraf yüklenirken bulutta arıza çıktı kanka:", err);
+        Alert.alert("Hata", "Fotoğraf sunucuya yüklenemedi ciğerim.");
+      } finally {
+        setUploading(false); 
       }
     }
   };
@@ -115,6 +160,7 @@ export default function ProfileScreen({ navigation }: any) {
           text: "Sil",
           style: "destructive",
           onPress: async () => {
+            const photoToDelete = dependentPhotos[selectedPhotoIndex];
             const updatedPhotos = dependentPhotos.filter((_, idx) => idx !== selectedPhotoIndex);
             setDependentPhotos(updatedPhotos);
 
@@ -126,7 +172,12 @@ export default function ProfileScreen({ navigation }: any) {
                   "finalData.dependent.photos": updatedPhotos,
                   "dependentPhotos": updatedPhotos
                 });
-                console.log("Fotoğraf db üzerinden kalıcı olarak uçuruldu kanka.");
+
+                if (photoToDelete.includes("firebasestorage.googleapis.com")) {
+                  const storageRef = ref(storage, photoToDelete);
+                  await deleteObject(storageRef).catch(e => console.log("Storage çöp temizleme hatası yoksayılabilir:", e));
+                }
+                console.log("Fotoğraf db ve buluttan kalıcı olarak uçuruldu kanka.");
               }
             } catch (err) {
               console.error("DB silme işlemi sırasında hata çıktı kanka:", err);
@@ -237,7 +288,13 @@ export default function ProfileScreen({ navigation }: any) {
               </TouchableOpacity>
             ))}
 
-            {dependentPhotos.length < 6 && (
+            {uploading && (
+              <View style={[styles.addPhotoSlot, { borderStyle: 'solid' }]}>
+                <ActivityIndicator size="small" color="#007AFF" />
+              </View>
+            )}
+
+            {!uploading && dependentPhotos.length < 6 && (
               <TouchableOpacity style={styles.addPhotoSlot} onPress={handleAddDependentPhoto}>
                 <Text style={styles.plusSign}>+</Text>
                 <Text style={styles.addPhotoSubText}>Ekle</Text>
@@ -246,7 +303,6 @@ export default function ProfileScreen({ navigation }: any) {
           </ScrollView>
         </View>
 
-        {/* === ALBÜMÜ TAMAMLA BUTONU (Orijinal Canlı Yeşil Rengine Geri Döndü!) === */}
         <TouchableOpacity 
           style={styles.editButton} 
           onPress={() => {
@@ -261,17 +317,19 @@ export default function ProfileScreen({ navigation }: any) {
       {/* ==================== TAM EKRAN ADIM ADIM KAYDIRMALI GALERİ MODALI ==================== */}
       <Modal
         visible={isGalleryModalVisible}
-        transparent={true}
+        transparent={true} 
         animationType="fade"
-        onRequestClose={() => setIsGalleryModalVisible(false)}
+        onRequestClose={() => setIsGalleryModalVisible(false)} 
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalCounter}>{dependentPhotos.length > 0 ? `${selectedPhotoIndex + 1} / ${dependentPhotos.length}` : '0 / 0'}</Text>
+            <View style={styles.counterBadge}>
+              <Text style={styles.modalCounter}>{dependentPhotos.length > 0 ? `${selectedPhotoIndex + 1} / ${dependentPhotos.length}` : '0 / 0'}</Text>
+            </View>
             
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <TouchableOpacity 
-                style={[styles.closeButton, { marginRight: 15, backgroundColor: 'rgba(255, 59, 48, 0.3)' }]} 
+                style={[styles.closeButton, { marginRight: 12, backgroundColor: 'rgba(255, 59, 48, 0.25)', borderColor: 'rgba(255, 59, 48, 0.3)' }]} 
                 onPress={handleDeletePhoto}
               >
                 <Ionicons name="trash-outline" size={18} color="#ff3b30" />
@@ -310,7 +368,6 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
       </Modal>
 
-      {/* ================= NEW COMPONENT BOTTOM BAR ================= */}
       <BottomBar navigation={navigation} activeScreen="Profile" />
     </View>
   );
@@ -335,7 +392,6 @@ const styles = StyleSheet.create({
   noteBox: { backgroundColor: '#fff9e6', padding: 10, borderRadius: 8, marginTop: 10, borderWidth: 1, borderColor: '#ffe0b2' },
   noteText: { fontSize: 13, color: '#b78103' },
   
-  // === GALERİ STYLES ===
   galleryScroll: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
   galleryItemContainer: { width: 80, height: 80, borderRadius: 10, marginRight: 12, overflow: 'hidden', backgroundColor: '#eee', borderWidth: 1, borderColor: '#ddd' },
   galleryImage: { width: '100%', height: '100%' },
@@ -343,16 +399,50 @@ const styles = StyleSheet.create({
   plusSign: { fontSize: 26, color: '#007AFF', fontWeight: 'bold', marginTop: -2 },
   addPhotoSubText: { fontSize: 11, color: '#007AFF', fontWeight: '600', marginTop: -2 },
 
-  // KANKA: Renkleri tam senin istediğin gibi o tatlı yeşil tonuna sabitledim!
   editButton: { backgroundColor: '#34c759', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 5, elevation: 2 },
   editButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
 
-  // === TAM EKRAN MODAL MERMİ STİLLERİ ===
-  modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.95)', justifyContent: 'center', alignItems: 'center' },
-  modalHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 50 : 20, position: 'absolute', top: 0, zIndex: 10 },
-  modalCounter: { color: 'white', fontSize: 16, fontWeight: '600' },
-  closeButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  closeButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.55)', justifyContent: 'center', alignItems: 'center' },
+  modalHeader: { 
+    width: '100%', 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingTop: Platform.OS === 'ios' ? 60 : 30, 
+    position: 'absolute', 
+    top: 0, 
+    zIndex: 10,
+    backgroundColor: 'transparent', 
+  },
+  counterBadge: {
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', 
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.15)'
+  },
+  modalCounter: { 
+    color: '#ffffff', 
+    fontSize: 14, 
+    fontWeight: '700'
+  },
+  closeButton: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)'
+  },
+  closeButtonText: { 
+    color: '#ffffff', 
+    fontSize: 16, 
+    fontWeight: 'bold' 
+  },
   modalScrollView: { width: width, height: height },
   fullscreenImageContainer: { width: width, height: height, justifyContent: 'center', alignItems: 'center' },
   fullscreenImage: { width: width, height: height * 0.8 }
