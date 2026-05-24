@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, 
-  KeyboardAvoidingView, Platform, ActivityIndicator, SafeAreaView, Alert 
+  KeyboardAvoidingView, Platform, ActivityIndicator, SafeAreaView, Alert , Linking
 } from 'react-native';
 import { auth, db } from '../config/firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
@@ -153,12 +153,34 @@ export default function ChatScreen({ route, navigation }: any) {
       );
     }
 
+    // KANKA: Haritaya tıklanınca dış haritayı tetikleyen fonksiyon
+    const openExternalMap = (lat: number, lng: number) => {
+      // Android için Google Maps, iOS için Apple Maps link şeması
+      const scheme = Platform.select({ ios: 'maps://?q=', android: 'geo:0,0?q=' });
+      const latLng = `${lat},${lng}`;
+      const label = 'NFCTT Bulucu Konumu';
+      const url = Platform.select({
+        ios: `${scheme}${label}@${latLng}`,
+        android: `${scheme}${latLng}(${label})`
+      });
+
+      if (url) {
+        Linking.openURL(url).catch(() => {
+          Alert.alert('Hata', 'Harita uygulaması açılmadı biladerim.');
+        });
+      }
+    };
+
     return (
       <View style={[styles.messageWrapper, isMyMessage ? styles.myMessageWrapper : styles.otherMessageWrapper]}>
         <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble, item.type === 'location' && styles.mapBubble]}>
           {item.type === 'location' && item.latitude && item.longitude ? (
-            // KANKA: Eğer gelen mesaj bir konumsa balonun içine mini harita gömüyoruz!
-            <View style={styles.mapContainer}>
+            // KANKA: iOS tıklasın diye bütün harita balonunu tıklanabilir (TouchableOpacity) yaptık!
+            <TouchableOpacity 
+              style={styles.mapContainer} 
+              onPress={() => openExternalMap(item.latitude!, item.longitude!)}
+              activeOpacity={0.7}
+            >
               <MapView
                 style={styles.miniMap}
                 initialRegion={{
@@ -171,13 +193,14 @@ export default function ChatScreen({ route, navigation }: any) {
                 zoomEnabled={false}
                 pitchEnabled={false}
                 rotateEnabled={false}
+                pointerEvents="none" // KANKA: iOS'ta tıklamayı harita yutmasın, butona geçsin diye can alıcı zırh!
               >
                 <Marker coordinate={{ latitude: item.latitude, longitude: item.longitude }} />
               </MapView>
               <Text style={[styles.mapText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
-                📍 Paylaşılan Konum
+                📍 Haritada Gitmek İçin Tıkla
               </Text>
-            </View>
+            </TouchableOpacity>
           ) : (
             <Text style={[styles.messageText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
               {item.text}
