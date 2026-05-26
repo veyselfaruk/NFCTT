@@ -1,13 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, 
-  KeyboardAvoidingView, Platform, ActivityIndicator, SafeAreaView, Alert , Linking
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking,
+  ImageBackground // KANKA: Parşömen için bunu ekledik
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
+
+// KANKA: İndirdiğin parşömen resmini buraya mühürledik
+const parchmentBg = require('../../assets/parchment_bg.png');
 
 interface Message {
   id: string;
@@ -101,11 +106,10 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
-  // === CANLI KONUM ATMA MOTORU (BOMBASTİK ÖZELLİK) ===
+  // === CANLI KONUM ATMA MOTORU ===
   const handleSendLocation = async () => {
     if (chatId === 'system_welcome' || !currentUser) return;
 
-    // 1. Kullanıcıdan konum izni istiyoruz kanka
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('İzin Reddedildi', 'Konumunu paylaşmak için ayarlardan izin vermen gerekiyor biladerim.');
@@ -114,11 +118,9 @@ export default function ChatScreen({ route, navigation }: any) {
 
     setLocationLoading(true);
     try {
-      // 2. GPS koordinatlarını anlık olarak çekiyoruz
       let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const { latitude, longitude } = location.coords;
 
-      // 3. Firestore'a konum tipiyle mühürlüyoruz kanka
       await addDoc(collection(db, "chats", chatId, "messages"), {
         senderId: currentUser.uid,
         text: '📍 Konum paylaşıldı',
@@ -153,9 +155,7 @@ export default function ChatScreen({ route, navigation }: any) {
       );
     }
 
-    // KANKA: Haritaya tıklanınca dış haritayı tetikleyen fonksiyon
     const openExternalMap = (lat: number, lng: number) => {
-      // Android için Google Maps, iOS için Apple Maps link şeması
       const scheme = Platform.select({ ios: 'maps://?q=', android: 'geo:0,0?q=' });
       const latLng = `${lat},${lng}`;
       const label = 'NFCTT Bulucu Konumu';
@@ -175,7 +175,6 @@ export default function ChatScreen({ route, navigation }: any) {
       <View style={[styles.messageWrapper, isMyMessage ? styles.myMessageWrapper : styles.otherMessageWrapper]}>
         <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble, item.type === 'location' && styles.mapBubble]}>
           {item.type === 'location' && item.latitude && item.longitude ? (
-            // KANKA: iOS tıklasın diye bütün harita balonunu tıklanabilir (TouchableOpacity) yaptık!
             <TouchableOpacity 
               style={styles.mapContainer} 
               onPress={() => openExternalMap(item.latitude!, item.longitude!)}
@@ -193,7 +192,7 @@ export default function ChatScreen({ route, navigation }: any) {
                 zoomEnabled={false}
                 pitchEnabled={false}
                 rotateEnabled={false}
-                pointerEvents="none" // KANKA: iOS'ta tıklamayı harita yutmasın, butona geçsin diye can alıcı zırh!
+                pointerEvents="none"
               >
                 <Marker coordinate={{ latitude: item.latitude, longitude: item.longitude }} />
               </MapView>
@@ -231,25 +230,27 @@ export default function ChatScreen({ route, navigation }: any) {
         style={styles.contentFlex}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color="#000000" />
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => item.id}
-            renderItem={renderMessageItem}
-            contentContainerStyle={styles.messagesList}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          />
-        )}
+        {/* KANKA: Sadece mesaj listesini parşömen ile kapladık */}
+        <ImageBackground source={parchmentBg} style={styles.contentFlex} resizeMode="cover">
+          {loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color="#000000" />
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(item) => item.id}
+              renderItem={renderMessageItem}
+              contentContainerStyle={styles.messagesList}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            />
+          )}
+        </ImageBackground>
 
         {/* INPUT ALANI */}
         {chatId !== 'system_welcome' && (
           <View style={styles.inputContainer}>
-            {/* KANKA: Harita fırlatma pin butonunu buraya çaktık */}
             <TouchableOpacity 
               style={styles.locationButton} 
               onPress={handleSendLocation}
@@ -304,16 +305,35 @@ const styles = StyleSheet.create({
   myMessageWrapper: { justifyContent: 'flex-end' },
   otherMessageWrapper: { justifyContent: 'flex-start' },
   
+  // === KANKA: YENİ NESİL KURUMSAL RENK PALETİ STİLLERİ ===
   bubble: { maxWidth: '75%', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20 },
-  myBubble: { backgroundColor: '#000000', borderBottomRightRadius: 4 },
-  otherBubble: { backgroundColor: '#f2f2f7', borderBottomLeftRadius: 4 },
-  mapBubble: { width: 240, paddingHorizontal: 0, paddingVertical: 0, overflow: 'hidden', borderRadius: 16 },
+  
+  // KANKA: Senin gönderdiğin mesajlar - Şık Duman Grisi / Soft Antrasit
+  myBubble: { 
+    backgroundColor: 'rgba(85, 85, 95, 0.85)', 
+    borderBottomRightRadius: 4 
+  },
+  
+  // KANKA: Karşı taraftan gelen mesajlar - Pamuk / Kirli Beyaz Tonu
+  otherBubble: { 
+    backgroundColor: 'rgba(242, 242, 247, 0.9)', 
+    borderBottomLeftRadius: 4,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0, 0, 0, 0.05)' // Parşömenden hafif ayrılsın diye çok ince bir kenarlık
+  },
+  
+  // KANKA: Konum harita balonu (Zeminle uyumlu temiz beyaz kalsın)
+  mapBubble: { width: 240, paddingHorizontal: 0, paddingVertical: 0, overflow: 'hidden', borderRadius: 16, backgroundColor: '#ffffff' },
   
   messageText: { fontSize: 15, lineHeight: 20 },
-  myMessageText: { color: '#ffffff' },
-  otherMessageText: { color: '#000000' },
   
-  systemMessageContainer: { backgroundColor: '#f9f9fb', borderWidth: 1, borderColor: '#e5e5ea', padding: 15, borderRadius: 12, marginVertical: 10, alignItems: 'center' },
+  // KANKA: Koyu gri balonda rahat okunsun diye metin beyaz ve net
+  myMessageText: { color: '#ffffff', fontWeight: '500' },
+  
+  // KANKA: Kirli beyaz balonda kurumsal dursun diye mat koyu gri
+  otherMessageText: { color: '#1c1c1e' },
+  
+  systemMessageContainer: { backgroundColor: 'rgba(249, 249, 251, 0.85)', borderWidth: 1, borderColor: '#e5e5ea', padding: 15, borderRadius: 12, marginVertical: 10, alignItems: 'center' },
   systemMessageText: { fontSize: 13, color: '#666666', textAlign: 'center', lineHeight: 18 },
   
   inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderTopWidth: 0.5, borderColor: '#e5e5ea', backgroundColor: '#ffffff' },
@@ -324,5 +344,5 @@ const styles = StyleSheet.create({
 
   mapContainer: { width: '100%', height: 180 },
   miniMap: { width: '100%', height: 140 },
-  mapText: { padding: 10, fontSize: 13, fontWeight: '500', textAlign: 'center' }
+  mapText: { padding: 10, fontSize: 13, fontWeight: '500', textAlign: 'center', color: '#000000' }
 });

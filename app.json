@@ -14,13 +14,13 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "NFCTT, kaybolan canlınızın tam konumunu bulucuyla paylaşabilmeniz ve harita üzerinde görebilmeniz için konum izni gerektirir biladerim."
+        "NSLocationWhenInUseUsageDescription": "NFCTT, kaybolan canlınızın anlık konumunu harita üzerinde görüntüleyebilmeniz ve takip birimleriyle güvenli şekilde paylaşabilmeniz için konumunuza erişim izni talep eder."
       }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
-        "foregroundImage": "./assets/adaptive-icon.png"
+        "foregroundImage": "./assets/icon.png"
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",

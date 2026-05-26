@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'; 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { 
   View, Text, StyleSheet, TouchableOpacity, 
@@ -11,20 +11,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebaseConfig'; 
 // KANKA: Sadece signOut motorunu çekiyoruz, getAuth kırıntısı tamamen temizlendi!
 import { signOut } from 'firebase/auth'; 
+
 import BottomBar from '../components/BottomBar';
+
 export default function HomeScreen({ navigation }: any) {
   // Canlı bildirim durumunu simüle eden state
   const [activeAlert, setActiveAlert] = useState<any>(null);
 
-  // Güvenli çıkış fonksiyonu (Korumalı auth ile tıkır tıkır çalışacak kanka)
+  // Güvenli çıkış fonksiyonu
   const handleLogout = async () => {
     try {
-      // Kanka buradaki ham "const auth = getAuth();" sızıntısını sildik, 
-      // artık direkt yukarıda import ettiğimiz korumalı ve hafızalı auth motorunu tetikliyor:
       await signOut(auth);
-      console.log('Kullanıcı oturumu başarıyla kapatıldı.');
+      console.log('[Oturum Yönetimi] Kullanıcı oturumu başarıyla kapatıldı.');
     } catch (err) {
-      console.error('Oturum kapatılırken bir hata oluştu:', err);
+      console.error('[Oturum Hatası] Oturum kapatılırken bir sorun oluştu:', err);
     }
   };
 

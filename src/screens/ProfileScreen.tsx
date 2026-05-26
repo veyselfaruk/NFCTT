@@ -207,7 +207,7 @@ export default function ProfileScreen({ navigation }: any) {
   const dependent = profileData?.dependent || {};
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f2f5' }}>
+    <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContainer}>
         
         {/* === ÜST HEADER VE ANIMASYONLU AVATAR ALANI === */}
@@ -230,11 +230,12 @@ export default function ProfileScreen({ navigation }: any) {
 
         {/* === 1. KART: VELİ BİLGİLERİ === */}
         <View style={styles.infoCard}>
-          <Text style={styles.cardTitle}>🛡️ Veli / Koruyan Bilgileri</Text>
+          <Text style={styles.cardTitle}>Veli / Koruyan Bilgileri</Text>
           <View style={styles.divider} />
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Telefon:</Text><Text style={styles.infoValue}>{parent.phone || '-'}</Text></View>
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{parent.age || '-'} Yaş / {parent.gender || '-'}</Text></View>
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#ff3b30', fontWeight: 'bold'}]}>{parent.bloodType || '-'}</Text></View>
+          {/* KANKA: Kan grubundaki o bağıran kırmızı rengi de yumuşatıp antrasit yaptık */}
+          <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{parent.bloodType || '-'}</Text></View>
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Bölge:</Text><Text style={styles.infoValue}>{parent.district || '-'} / {citiesAndDistricts.getCities().find((c: any) => String(c.code) === String(parent.city))?.name || parent.city || '-'}</Text></View>
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Adres:</Text><Text style={styles.infoValue}>{parent.address || '-'}</Text></View>
           {parent.note ? (
@@ -244,7 +245,7 @@ export default function ProfileScreen({ navigation }: any) {
 
         {/* === 2. KART: BAĞIMLI CANLI BİLGİLERİ === */}
         <View style={styles.infoCard}>
-          <Text style={styles.cardTitle}>❤️ Koruma Altındaki Canlı ({dependent.type || 'Belirtilmemiş'})</Text>
+          <Text style={styles.cardTitle}>Koruma Altındaki Canlı ({dependent.type || 'Belirtilmemiş'})</Text>
           <View style={styles.divider} />
           <View style={styles.infoRow}><Text style={styles.infoLabel}>İsim:</Text><Text style={styles.infoValue}>{dependent.name || '-'}</Text></View>
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{dependent.age || '-'} / {dependent.gender || '-'}</Text></View>
@@ -252,7 +253,7 @@ export default function ProfileScreen({ navigation }: any) {
           {(dependent.type === 'Çocuk' || dependent.type === 'Yaşlı') && (
             <>
               <View style={styles.infoRow}><Text style={styles.infoLabel}>Boy / Kilo:</Text><Text style={styles.infoValue}>{dependent.heightWeight || '-'}</Text></View>
-              <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#ff3b30', fontWeight: 'bold'}]}>{dependent.bloodType || '-'}</Text></View>
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{dependent.bloodType || '-'}</Text></View>
             </>
           )}
 
@@ -268,8 +269,8 @@ export default function ProfileScreen({ navigation }: any) {
         {/* === 3. KART: FOTOĞRAF GALERİSİ === */}
         <View style={styles.infoCard}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={styles.cardTitle}>📸 Albüm / Fotoğraf Ekle</Text>
-            <Text style={{ fontSize: 12, color: '#888' }}>{dependentPhotos.length} / 6</Text>
+            <Text style={styles.cardTitle}>Albüm / Fotoğraf Ekle</Text>
+            <Text style={{ fontSize: 12, color: '#8e8e93', fontWeight: '500' }}>{dependentPhotos.length} / 6</Text>
           </View>
           <View style={styles.divider} />
 
@@ -290,7 +291,7 @@ export default function ProfileScreen({ navigation }: any) {
 
             {uploading && (
               <View style={[styles.addPhotoSlot, { borderStyle: 'solid' }]}>
-                <ActivityIndicator size="small" color="#007AFF" />
+                <ActivityIndicator size="small" color="#1c1c1e" />
               </View>
             )}
 
@@ -303,6 +304,7 @@ export default function ProfileScreen({ navigation }: any) {
           </ScrollView>
         </View>
 
+        {/* KANKA: O patlayan yeşil buton yerine buraya asil bir saman grisi/vizon mühür vurduk */}
         <TouchableOpacity 
           style={styles.editButton} 
           onPress={() => {
@@ -374,35 +376,48 @@ export default function ProfileScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f2f5' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
   scrollContainer: { padding: 15, paddingBottom: 110 },
-  headerCard: { backgroundColor: 'white', padding: 20, borderRadius: 15, alignItems: 'center', marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3 },
+  
+  // KANKA: Uydurma borderPlatformWidth silindi, burası tertemiz yapıldı
+  headerCard: { 
+    backgroundColor: 'white', 
+    padding: 20, 
+    borderRadius: 15, 
+    alignItems: 'center', 
+    marginBottom: 15, 
+    borderWidth: 0.5, 
+    borderColor: '#e5e5ea' 
+  },
+  
   avatarWrapper: { zIndex: 999, height: 85, justifyContent: 'center', alignItems: 'center' },
-  avatarContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#fff', elevation: 4 },
+  avatarContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#1c1c1e', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#fff', elevation: 4 },
   avatar: { width: '100%', height: '100%' },
   avatarPlaceholder: { fontSize: 32, color: 'white' },
-  userName: { fontSize: 20, fontWeight: 'bold', color: '#333', marginTop: 10 },
-  userSubText: { fontSize: 13, color: '#666', marginTop: 2 },
-  infoCard: { backgroundColor: 'white', padding: 15, borderRadius: 15, marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3 },
-  cardTitle: { fontSize: 15, fontWeight: 'bold', color: '#007AFF' },
-  divider: { height: 1, backgroundColor: '#eee', marginVertical: 10 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: '#f5f5f5' },
+  userName: { fontSize: 20, fontWeight: '700', color: '#1c1c1e', marginTop: 10 },
+  userSubText: { fontSize: 13, color: '#8e8e93', marginTop: 2, fontWeight: '500' },
+  infoCard: { backgroundColor: 'white', padding: 15, borderRadius: 15, marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e5ea' },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1c1c1e' },
+  divider: { height: 0.5, backgroundColor: '#e5e5ea', marginVertical: 10 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: '#f5f5f5' },
   infoLabel: { fontSize: 14, color: '#666', fontWeight: '500' },
-  infoValue: { fontSize: 14, color: '#333', textAlign: 'right', flex: 1, paddingLeft: 10 },
-  noteBox: { backgroundColor: '#fff9e6', padding: 10, borderRadius: 8, marginTop: 10, borderWidth: 1, borderColor: '#ffe0b2' },
-  noteText: { fontSize: 13, color: '#b78103' },
+  infoValue: { fontSize: 14, color: '#1c1c1e', textAlign: 'right', flex: 1, paddingLeft: 10, fontWeight: '400' },
+  
+  noteBox: { backgroundColor: '#f4f1ea', padding: 12, borderRadius: 10, marginTop: 12, borderWidth: 0.5, borderColor: '#dcd7cd' },
+  noteText: { fontSize: 13, color: '#5c5245', lineHeight: 18 },
   
   galleryScroll: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
   galleryItemContainer: { width: 80, height: 80, borderRadius: 10, marginRight: 12, overflow: 'hidden', backgroundColor: '#eee', borderWidth: 1, borderColor: '#ddd' },
   galleryImage: { width: '100%', height: '100%' },
-  addPhotoSlot: { width: 80, height: 80, borderRadius: 10, borderWidth: 2, borderColor: '#007AFF', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f8ff' },
-  plusSign: { fontSize: 26, color: '#007AFF', fontWeight: 'bold', marginTop: -2 },
-  addPhotoSubText: { fontSize: 11, color: '#007AFF', fontWeight: '600', marginTop: -2 },
+  
+  addPhotoSlot: { width: 80, height: 80, borderRadius: 10, borderWidth: 1.5, borderColor: '#1c1c1e', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: '#fdfdfd' },
+  plusSign: { fontSize: 24, color: '#1c1c1e', fontWeight: '400', marginTop: -2 },
+  addPhotoSubText: { fontSize: 11, color: '#1c1c1e', fontWeight: '600', marginTop: -2 },
 
-  editButton: { backgroundColor: '#34c759', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 5, elevation: 2 },
-  editButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  editButton: { backgroundColor: '#d1c7bd', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10, borderWidth: 0.5, borderColor: '#beaf9f' },
+  editButtonText: { color: '#2b231a', fontWeight: '700', fontSize: 15, letterSpacing: 0.3 },
 
-  modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.55)', justifyContent: 'center', alignItems: 'center' },
+  modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'center', alignItems: 'center' },
   modalHeader: { 
     width: '100%', 
     flexDirection: 'row', 
@@ -416,12 +431,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent', 
   },
   counterBadge: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)', 
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', 
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.15)'
+    borderColor: 'rgba(255, 255, 255, 0.2)'
   },
   modalCounter: { 
     color: '#ffffff', 
@@ -432,7 +447,7 @@ const styles = StyleSheet.create({
     width: 40, 
     height: 40, 
     borderRadius: 20, 
-    backgroundColor: 'rgba(0, 0, 0, 0.4)', 
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', 
     justifyContent: 'center', 
     alignItems: 'center',
     borderWidth: 0.5,
@@ -444,6 +459,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' 
   },
   modalScrollView: { width: width, height: height },
+  // KANKA: Araya giren sinsi 'Soyisim' kelimesi temizlendi, parantezler hizalandı
   fullscreenImageContainer: { width: width, height: height, justifyContent: 'center', alignItems: 'center' },
   fullscreenImage: { width: width, height: height * 0.8 }
 });
