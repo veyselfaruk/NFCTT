@@ -1,4 +1,4 @@
-package com.nfctt
+package com.anonymous.NFCTT
 
 import android.app.Application
 import android.content.res.Configuration

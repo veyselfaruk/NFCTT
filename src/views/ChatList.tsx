@@ -179,7 +179,7 @@ export default function ChatList({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
   header: { 
-    paddingTop: Platform.OS === 'ios' ? 60 : 40, 
+    paddingTop: Platform.OS === 'ios' ? 60 : 45, 
     paddingHorizontal: 20, 
     paddingBottom: 15, 
     borderBottomWidth: 0.5, 

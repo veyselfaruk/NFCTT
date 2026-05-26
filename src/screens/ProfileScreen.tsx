@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { auth, db, storage } from '../config/firebaseConfig'; 
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; 
 import BottomBar from '../components/BottomBar';
 import { Ionicons } from '@expo/vector-icons'; 
@@ -13,24 +13,36 @@ import { Ionicons } from '@expo/vector-icons';
 const { width, height } = Dimensions.get('window');
 const citiesAndDistricts = require('turkey-neighbourhoods');
 
+const GRID_PADDING = 15;
+const CARD_INTERNAL_PADDING = 15;
+const VISIBLE_WIDTH = width - (GRID_PADDING * 2) - (CARD_INTERNAL_PADDING * 2);
+const FIXED_IMAGE_SIZE = (VISIBLE_WIDTH - 16) / 3;
+
 export default function ProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false); 
+  const [avatarUploading, setAvatarUploading] = useState(false); 
   const [profileData, setProfileData] = useState<any>(null);
   const [dependentPhotos, setDependentPhotos] = useState<string[]>([]);
   const [isAvatarExpanded, setIsAvatarExpanded] = useState(false);
 
-  // === GALERİ BÜYÜTME, SILME VE KAYDIRMA STATE'LERİ KANKA ===
+  const [isParentExpanded, setIsParentExpanded] = useState(false);
+  const [isDependentExpanded, setIsDependentExpanded] = useState(false);
+
   const [isGalleryModalVisible, setIsGalleryModalVisible] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
 
-  // === SCROLLVIEW REF TANIMLAMASI ===
+  const [isActionSheetVisible, setIsActionSheetVisible] = useState(false);
+  const [actionTarget, setActionTarget] = useState<'avatar' | 'album' | null>(null);
+
+  const [isSideMenuVisible, setIsSideMenuVisible] = useState(false);
+  const [isAboutVisible, setIsAboutVisible] = useState(false);
+  const [isFaqVisible, setIsFaqVisible] = useState(false);
+
   const scrollViewRef = useRef<ScrollView>(null);
-
-  // === ANIMASYON DEĞİŞKENİ (SCALE İÇİN) ===
   const avatarScale = useRef(new Animated.Value(1)).current;
+  const sideMenuTranslateX = useRef(new Animated.Value(width)).current;
 
-  // === FIRESTORE'DAN VERİLERİ ÇEKME MOTORU ===
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -41,7 +53,6 @@ export default function ProfileScreen({ navigation }: any) {
           
           if (profileSnap.exists()) {
             const rawData = profileSnap.data();
-            
             let actualData = rawData.finalData ? rawData.finalData : rawData;
             
             if (!actualData?.parent?.name && rawData?.parent?.name) {
@@ -49,13 +60,12 @@ export default function ProfileScreen({ navigation }: any) {
             }
             
             setProfileData(actualData);
-            
             const savedPhotos = rawData?.dependentPhotos || actualData?.dependent?.photos || [];
-            setDependentPhotos(savedPhotos);
+            setDependentPhotos([...savedPhotos].reverse());
           }
         }
       } catch (error) {
-        console.error("Profil çekilirken hata oluştu kanka:", error);
+        console.error("[Veri Hatası] Profil bilgileri çekilirken hata oluştu:", error);
       } finally {
         setLoading(false);
       }
@@ -64,7 +74,27 @@ export default function ProfileScreen({ navigation }: any) {
     fetchProfile();
   }, []);
 
-  // === AVATAR TIKLANDIĞINDA SCALE ETME ANIMASYONU ===
+  const openSideMenu = () => {
+    setIsSideMenuVisible(true);
+    Animated.timing(sideMenuTranslateX, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeSideMenu = () => {
+    Animated.timing(sideMenuTranslateX, {
+      toValue: width,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsSideMenuVisible(false);
+      setIsAboutVisible(false);
+      setIsFaqVisible(false);
+    });
+  };
+
   const toggleAvatarScale = () => {
     Animated.spring(avatarScale, {
       toValue: isAvatarExpanded ? 1 : 1.6,
@@ -74,16 +104,12 @@ export default function ProfileScreen({ navigation }: any) {
     setIsAvatarExpanded(!isAvatarExpanded);
   };
 
-  // === KALICI YÜKLEME MOTORU: SAF NATIVE XHR ILE BLOB DÖNÜŞÜMÜ ===
-  const uploadImageToStorage = async (uri: string, userUid: string) => {
-    // KANKA: Fetch bazen Android yerel dosya izinlerine takılabiliyor, XHR ile garantiye alıyoruz
+  const uploadImageToStorage = async (uri: string, path: string) => {
     const blob: any = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.onload = function () {
-        resolve(xhr.response);
-      };
+      xhr.onload = function () { resolve(xhr.response); };
       xhr.onerror = function (e) {
-        console.error("XHR Blob dönüşüm hatası kanka:", e);
+        console.error("[Network Hatası] XHR Blob dönüşüm hatası:", e);
         reject(new TypeError("Network request failed"));
       };
       xhr.responseType = "blob";
@@ -92,18 +118,10 @@ export default function ProfileScreen({ navigation }: any) {
     });
 
     try {
-      const filename = `gallery_${Date.now()}.jpg`;
-      const storageRef = ref(storage, `users/${userUid}/dependent_photos/${filename}`);
-      
-      // Storage'a yükleme işlemini başlatıyoruz
+      const storageRef = ref(storage, path);
       await uploadBytes(storageRef, blob);
-      
-      // Public HTTPS linkini geri döndürüyoruz
       const downloadUrl = await getDownloadURL(storageRef);
-      
-      // İşlem bitince RAM sızıntısı olmasın diye blob'u kapatıyoruz kanka
       blob.close();
-      
       return downloadUrl;
     } catch (error) {
       blob.close();
@@ -111,45 +129,183 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
-  // === YATAY GALERİYE YENİ FOTOĞRAF EKLEME MOTORU ===
-  const handleAddDependentPhoto = async () => {
-    if (dependentPhotos.length >= 6) return;
+  const executeAvatarUpdate = async (localUri: string, currentUserUid: string) => {
+    try {
+      setAvatarUploading(true);
+      const storagePath = `users/${currentUserUid}/profile_photos/avatar.jpg`;
+      const cloudUrl = await uploadImageToStorage(localUri, storagePath);
 
+      setProfileData((prev: any) => ({
+        ...prev,
+        parent: { ...prev?.parent, photoUrl: cloudUrl }
+      }));
+
+      const profileRef = doc(db, "profiles", currentUserUid);
+      await updateDoc(profileRef, {
+        "finalData.parent.photoUrl": cloudUrl,
+        "parent.photoUrl": cloudUrl
+      });
+
+      Alert.alert("Başarılı", "Profil fotoğrafınız başarıyla güncellenmiştir.");
+    } catch (err) {
+      console.error("[Storage Hatası] Avatar işlenirken arıza çıktı:", err);
+      Alert.alert("Hata", "Profil fotoğrafı yüklenirken bir hata oluştu.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const executeAlbumUpload = async (localUri: string, currentUserUid: string) => {
+    try {
+      setUploading(true); 
+      const filename = `gallery_${Date.now()}.jpg`;
+      const storagePath = `users/${currentUserUid}/dependent_photos/${filename}`;
+      const cloudUrl = await uploadImageToStorage(localUri, storagePath);
+      
+      const updatedPhotos = [cloudUrl, ...dependentPhotos];
+      setDependentPhotos(updatedPhotos);
+
+      const dbPhotosArray = [...updatedPhotos].reverse();
+
+      const profileRef = doc(db, "profiles", currentUserUid);
+      await updateDoc(profileRef, {
+        "finalData.dependent.photos": dbPhotosArray,
+        "dependentPhotos": dbPhotosArray
+      });
+    } catch (err) {
+      console.error("[Storage Hatası] Albüm fotoğrafı yüklenirken hata oluştu:", err);
+      Alert.alert("Hata", "Fotoğraf sunucuya yüklenemedi.");
+    } finally {
+      setUploading(false); 
+    }
+  };
+
+  const triggerAvatarSelect = () => {
+    if (isAvatarExpanded) toggleAvatarScale();
+    setActionTarget('avatar');
+    setIsActionSheetVisible(true);
+  };
+
+  const triggerAlbumSelect = () => {
+    if (dependentPhotos.length >= 6) return;
+    setActionTarget('album');
+    setIsActionSheetVisible(true);
+  };
+
+  const handleLaunchCamera = async () => {
+    setIsActionSheetVisible(false);
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("İzin Gerekli", "Kamerayı kullanabilmek için izin vermelisiniz.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
     });
 
     if (!result.canceled && result.assets[0].uri) {
-      const localUri = result.assets[0].uri;
-      
-      try {
-        setUploading(true); 
-        const cloudUrl = await uploadImageToStorage(localUri, currentUser.uid);
-        const updatedPhotos = [...dependentPhotos, cloudUrl];
-        setDependentPhotos(updatedPhotos);
-
-        const profileRef = doc(db, "profiles", currentUser.uid);
-        await updateDoc(profileRef, {
-          "finalData.dependent.photos": updatedPhotos,
-          "dependentPhotos": updatedPhotos
-        });
-        console.log("Fotoğraf buluta uçuruldu ve URL db üzerine başarıyla mühürlendi kanka.");
-      } catch (err) {
-        console.error("Fotoğraf yüklenirken bulutta arıza çıktı kanka:", err);
-        Alert.alert("Hata", "Fotoğraf sunucuya yüklenemedi ciğerim.");
-      } finally {
-        setUploading(false); 
+      if (actionTarget === 'avatar') {
+        executeAvatarUpdate(result.assets[0].uri, currentUser.uid);
+      } else if (actionTarget === 'album') {
+        executeAlbumUpload(result.assets[0].uri, currentUser.uid);
       }
     }
   };
 
-  // === BÜYÜTÜLEN FOTOĞRAFI SİLME MOTORU KANKA ===
+  const handleLaunchImageLibrary = async () => {
+    setIsActionSheetVisible(false);
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("İzin Gerekli", "Galeriye erişebilmek için izin vermelisiniz.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled && result.assets[0].uri) {
+      if (actionTarget === 'avatar') {
+        executeAvatarUpdate(result.assets[0].uri, currentUser.uid);
+      } else if (actionTarget === 'album') {
+        executeAlbumUpload(result.assets[0].uri, currentUser.uid);
+      }
+    }
+  };
+
+  const handleSignOut = () => {
+    Alert.alert("Oturumu Kapat", "Hesabınızdan çıkış yapmak istediğinize emin misiniz?", [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Çıkış Yap",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setIsSideMenuVisible(false);
+            await auth.signOut();
+            navigation.reset({ index: 0, routes: [{ name: 'UniversalLoginScreen' }] });
+          } catch (e) {
+            Alert.alert("Hata", "Çıkış yapılırken bir sorun oluştu.");
+          }
+        }
+      }
+    ]);
+  };
+
+  const handlePasswordReset = async () => {
+    const user = auth.currentUser;
+    if (user && user.email) {
+      try {
+        Alert.alert("E-posta Gönderildi", `${user.email} adresine şifre sıfırlama bağlantısı gönderilmiştir.`);
+      } catch (e) {
+        Alert.alert("Hata", "İşlem gerçekleştirilemedi.");
+      }
+    }
+  };
+
+  const handleMailChangePlaceholder = () => {
+    Alert.alert("E-posta Güncelleme", "Güvenlik protokolleri gereği e-posta adresi değişikliği için mevcut şifrenizle doğrulama adımları tetiklenecektir. Yakında aktif.");
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "⚠️ HESABI KALICI OLARAK SİL",
+      "Hesabınızı sildiğinizde veli kaydınız, tüm NFC UID mühürleriniz ve canlı albümleriniz kalıcı olarak yok edilecektir. Bu işlem geri alınamaz!",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Verilerimi ve Hesabımı Sil",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const user = auth.currentUser;
+              if (user) {
+                setIsSideMenuVisible(false);
+                const profileRef = doc(db, "profiles", user.uid);
+                await deleteDoc(profileRef);
+                Alert.alert("Bilgi", "Hesap silme talebiniz başarıyla kurumsal veri tabanına işlendi.");
+                navigation.reset({ index: 0, routes: [{ name: 'UniversalLoginScreen' }] });
+              }
+            } catch (e) {
+              Alert.alert("Güvenlik Hatası", "Kritik işlemlerden önce yakın zamanda giriş yapmış olmanız gerekir.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleDeletePhoto = async () => {
     Alert.alert(
       "Fotoğrafı Sil",
@@ -160,33 +316,28 @@ export default function ProfileScreen({ navigation }: any) {
           text: "Sil",
           style: "destructive",
           onPress: async () => {
-            const photoToDelete = dependentPhotos[selectedPhotoIndex];
-            const updatedPhotos = dependentPhotos.filter((_, idx) => idx !== selectedPhotoIndex);
-            setDependentPhotos(updatedPhotos);
-
             try {
+              const photoToDelete = dependentPhotos[selectedPhotoIndex];
+              const updatedPhotos = dependentPhotos.filter((_, idx) => idx !== selectedPhotoIndex);
+              setDependentPhotos(updatedPhotos);
+
+              const dbPhotosArray = [...updatedPhotos].reverse();
               const currentUser = auth.currentUser;
               if (currentUser) {
                 const profileRef = doc(db, "profiles", currentUser.uid);
                 await updateDoc(profileRef, {
-                  "finalData.dependent.photos": updatedPhotos,
-                  "dependentPhotos": updatedPhotos
+                  "finalData.dependent.photos": dbPhotosArray,
+                  "dependentPhotos": dbPhotosArray
                 });
 
                 if (photoToDelete.includes("firebasestorage.googleapis.com")) {
                   const storageRef = ref(storage, photoToDelete);
-                  await deleteObject(storageRef).catch(e => console.log("Storage çöp temizleme hatası yoksayılabilir:", e));
+                  await deleteObject(storageRef).catch(e => console.error("[Storage Hatası] Dosya silinemedi:", e));
                 }
-                console.log("Fotoğraf db ve buluttan kalıcı olarak uçuruldu kanka.");
               }
-            } catch (err) {
-              console.error("DB silme işlemi sırasında hata çıktı kanka:", err);
-            }
-
-            if (updatedPhotos.length === 0) {
               setIsGalleryModalVisible(false);
-            } else if (selectedPhotoIndex >= updatedPhotos.length) {
-              setSelectedPhotoIndex(updatedPhotos.length - 1);
+            } catch (err) {
+              console.error("[Veri Hatası] Silme işlemi esnasında hata oluştu:", err);
             }
           }
         }
@@ -197,8 +348,8 @@ export default function ProfileScreen({ navigation }: any) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 10, color: '#666' }}>Profil yükleniyor ciğerim...</Text>
+        <ActivityIndicator size="large" color="#beaf9f" />
+        <Text style={{ marginTop: 10, color: '#636366', fontWeight: '500' }}>Profil yükleniyor...</Text>
       </View>
     );
   }
@@ -206,117 +357,173 @@ export default function ProfileScreen({ navigation }: any) {
   const parent = profileData?.parent || {};
   const dependent = profileData?.dependent || {};
 
+  const slots: any[] = [...dependentPhotos];
+  if (slots.length < 6 && !uploading) {
+    slots.push('ADD_BUTTON_SLOT');
+  }
+
+  const rows: any[][] = [];
+  for (let i = 0; i < slots.length; i += 3) {
+    rows.push(slots.slice(i, i + 3));
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+      
+      {/* === TOP HEADER BAR === */}
+      <View style={styles.topNavigationHeader}>
+        <Text style={styles.topNavigationTitle}>NFCTT Güvence Paneli</Text>
+        <TouchableOpacity style={styles.hamburgerMenuButton} onPress={openSideMenu} activeOpacity={0.7}>
+          <Ionicons name="menu-outline" size={26} color="#1c1c1e" />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContainer}>
         
-        {/* === ÜST HEADER VE ANIMASYONLU AVATAR ALANI === */}
+        {/* === HEADER VE AVATAR ALANI === */}
         <View style={styles.headerCard}>
-          <TouchableOpacity activeOpacity={0.9} onPress={toggleAvatarScale} style={styles.avatarWrapper}>
-            <Animated.View style={[styles.avatarContainer, { transform: [{ scale: avatarScale }] }]}>
-              {parent.photoUrl ? (
-                <Image source={{ uri: parent.photoUrl }} style={styles.avatar} />
-              ) : (
-                <Text style={styles.avatarPlaceholder}>{parent.name ? parent.name[0].toUpperCase() : '👤'}</Text>
-              )}
-            </Animated.View>
-          </TouchableOpacity>
+          <View style={styles.avatarRowContainer}>
+            <TouchableOpacity activeOpacity={0.9} onPress={toggleAvatarScale} style={styles.avatarWrapper}>
+              <Animated.View style={[styles.avatarContainer, { transform: [{ scale: avatarScale }] }]}>
+                {parent.photoUrl ? (
+                  <Image source={{ uri: parent.photoUrl }} style={styles.avatar} />
+                ) : (
+                  <Text style={styles.avatarPlaceholder}>{parent.name ? parent.name[0].toUpperCase() : '👤'}</Text>
+                )}
+              </Animated.View>
+            </TouchableOpacity>
+
+            {!isAvatarExpanded && (
+              <TouchableOpacity style={styles.editAvatarBadge} onPress={triggerAvatarSelect} activeOpacity={0.8}>
+                {avatarUploading ? (
+                  <ActivityIndicator size="small" color="#2b231a" />
+                ) : (
+                  <Ionicons name="camera-outline" size={16} color="#2b231a" />
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
           
-          <View style={{ alignItems: 'center', marginTop: isAvatarExpanded ? 30 : 0 }}>
+          <View style={{ alignItems: 'center', marginTop: isAvatarExpanded ? 30 : 5 }}>
             <Text style={styles.userName}>{parent.name || 'İsim Soyisim'}</Text>
             <Text style={styles.userSubText}>NFCTT Güvence Veli Profili</Text>
           </View>
         </View>
 
-        {/* === 1. KART: VELİ BİLGİLERİ === */}
+        {/* === KART 1: VELİ BİLGİLERİ PANELİ === */}
         <View style={styles.infoCard}>
-          <Text style={styles.cardTitle}>Veli / Koruyan Bilgileri</Text>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>Telefon:</Text><Text style={styles.infoValue}>{parent.phone || '-'}</Text></View>
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{parent.age || '-'} Yaş / {parent.gender || '-'}</Text></View>
-          {/* KANKA: Kan grubundaki o bağıran kırmızı rengi de yumuşatıp antrasit yaptık */}
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{parent.bloodType || '-'}</Text></View>
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>Bölge:</Text><Text style={styles.infoValue}>{parent.district || '-'} / {citiesAndDistricts.getCities().find((c: any) => String(c.code) === String(parent.city))?.name || parent.city || '-'}</Text></View>
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>Adres:</Text><Text style={styles.infoValue}>{parent.address || '-'}</Text></View>
-          {parent.note ? (
-            <View style={styles.noteBox}><Text style={styles.noteText}><Text style={{fontWeight: 'bold'}}>Kritik Veli Notu:</Text> {parent.note}</Text></View>
-          ) : null}
+          <TouchableOpacity 
+            style={styles.accordionHeader} 
+            activeOpacity={0.7} 
+            onPress={() => setIsParentExpanded(!isParentExpanded)}
+          >
+            <Text style={styles.cardTitle}>Veli / Koruyan Bilgileri</Text>
+            <Ionicons name={isParentExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color="#1c1c1e" />
+          </TouchableOpacity>
+          
+          {isParentExpanded && (
+            <View style={styles.accordionContent}>
+              <View style={styles.divider} />
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>Telefon:</Text><Text style={styles.infoValue}>{parent.phone || '-'}</Text></View>
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{parent.age || '-'} Yaş / {parent.gender || '-'}</Text></View>
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{parent.bloodType || '-'}</Text></View>
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>Bölge:</Text><Text style={styles.infoValue}>{parent.district || '-'} / {citiesAndDistricts.getCities().find((c: any) => String(c.code) === String(parent.city))?.name || parent.city || '-'}</Text></View>
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>Adres:</Text><Text style={styles.infoValue}>{parent.address || '-'}</Text></View>
+              {parent.note ? (
+                <View style={styles.noteBox}><Text style={styles.noteText}><Text style={{fontWeight: 'bold'}}>Kritik Veli Notu:</Text> {parent.note}</Text></View>
+              ) : null}
+            </View>
+          )}
         </View>
 
-        {/* === 2. KART: BAĞIMLI CANLI BİLGİLERİ === */}
+        {/* === KART 2: KORUMA ALTINDAKİ CANLI PANELİ === */}
         <View style={styles.infoCard}>
-          <Text style={styles.cardTitle}>Koruma Altındaki Canlı ({dependent.type || 'Belirtilmemiş'})</Text>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>İsim:</Text><Text style={styles.infoValue}>{dependent.name || '-'}</Text></View>
-          <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{dependent.age || '-'} / {dependent.gender || '-'}</Text></View>
+          <TouchableOpacity 
+            style={styles.accordionHeader} 
+            activeOpacity={0.7} 
+            onPress={() => setIsDependentExpanded(!isDependentExpanded)}
+          >
+            <Text style={styles.cardTitle}>Keep / Koruma Altındaki Canlı ({dependent.type || 'Belirtilmemiş'})</Text>
+            <Ionicons name={isDependentExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color="#1c1c1e" />
+          </TouchableOpacity>
+          
+          {isDependentExpanded && (
+            <View style={styles.accordionContent}>
+              <View style={styles.divider} />
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>İsim:</Text><Text style={styles.infoValue}>{dependent.name || '-'}</Text></View>
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{dependent.age || '-'} / {dependent.gender || '-'}</Text></View>
 
-          {(dependent.type === 'Çocuk' || dependent.type === 'Yaşlı') && (
-            <>
-              <View style={styles.infoRow}><Text style={styles.infoLabel}>Boy / Kilo:</Text><Text style={styles.infoValue}>{dependent.heightWeight || '-'}</Text></View>
-              <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{dependent.bloodType || '-'}</Text></View>
-            </>
+              {(dependent.type === 'Çocuk' || dependent.type === 'Yaşlı') && (
+                <>
+                  <View style={styles.infoRow}><Text style={styles.infoLabel}>Boy / Kilo:</Text><Text style={styles.infoValue}>{dependent.heightWeight || '-'}</Text></View>
+                  <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{dependent.bloodType || '-'}</Text></View>
+                </>
+              )}
+
+              {dependent.type === 'Evcil Hayvan' && (
+                <View style={styles.infoRow}><Text style={styles.infoLabel}>Aşı/Çip No:</Text><Text style={styles.infoValue}>{dependent.chipNumber || '-'}</Text></View>
+              )}
+
+              {dependent.note ? (
+                <View style={styles.noteBox}><Text style={styles.noteText}><Text style={{fontWeight: 'bold'}}>Canlıya Özel Not:</Text> {dependent.note}</Text></View>
+              ) : null}
+            </View>
           )}
-
-          {dependent.type !== 'Çocuk' && dependent.type !== 'Yaşlı' && dependent.type && (
-            <View style={styles.infoRow}><Text style={styles.infoLabel}>Aşı/Çip No:</Text><Text style={styles.infoValue}>{dependent.chipNumber || '-'}</Text></View>
-          )}
-
-          {dependent.note ? (
-            <View style={styles.noteBox}><Text style={styles.noteText}><Text style={{fontWeight: 'bold'}}>Canlıya Özel Not:</Text> {dependent.note}</Text></View>
-          ) : null}
         </View>
 
-        {/* === 3. KART: FOTOĞRAF GALERİSİ === */}
+        {/* === KART 3: İNSTAGRAM TARZI AKICI GRID ALBÜM PANELİ === */}
         <View style={styles.infoCard}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={styles.cardTitle}>Albüm / Fotoğraf Ekle</Text>
+            <Text style={styles.cardTitle}>Albüm / Fotoğraflar</Text>
             <Text style={{ fontSize: 12, color: '#8e8e93', fontWeight: '500' }}>{dependentPhotos.length} / 6</Text>
           </View>
           <View style={styles.divider} />
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryScroll}>
-            {dependentPhotos.map((photoUri, index) => (
-              <TouchableOpacity 
-                key={`gallery-photo-${index}`} 
-                style={styles.galleryItemContainer}
-                activeOpacity={0.8}
-                onPress={() => {
-                  setSelectedPhotoIndex(index);
-                  setIsGalleryModalVisible(true);
-                }}
-              >
-                <Image source={{ uri: photoUri }} style={styles.galleryImage} />
-              </TouchableOpacity>
+          <View style={styles.instagramGridContainer}>
+            {rows.map((rowItems, rowIndex) => (
+              <View key={`grid-row-${rowIndex}`} style={styles.gridRowLayout}>
+                {rowItems.map((item, colIndex) => {
+                  const originalIndex = (rowIndex * 3) + colIndex;
+
+                  if (item === 'ADD_BUTTON_SLOT') {
+                    return (
+                      <TouchableOpacity key="dynamic-add-btn" style={styles.gridAddPhotoSlot} onPress={triggerAlbumSelect}>
+                        <Text style={styles.plusSign}>+</Text>
+                        <Text style={styles.addPhotoSubText}>Ekle</Text>
+                      </TouchableOpacity>
+                    );
+                  }
+
+                  return (
+                    <TouchableOpacity 
+                      key={`grid-photo-${originalIndex}`} 
+                      style={styles.gridImageWrapper}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setSelectedPhotoIndex(originalIndex);
+                        setIsGalleryModalVisible(true);
+                      }}
+                    >
+                      <Image source={{ uri: item }} style={styles.gridImage} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             ))}
 
             {uploading && (
-              <View style={[styles.addPhotoSlot, { borderStyle: 'solid' }]}>
-                <ActivityIndicator size="small" color="#1c1c1e" />
+              <View style={styles.gridRowLayout}>
+                <View style={styles.gridAddPhotoSlot}>
+                  <ActivityIndicator size="small" color="#2b231a" />
+                </View>
               </View>
             )}
-
-            {!uploading && dependentPhotos.length < 6 && (
-              <TouchableOpacity style={styles.addPhotoSlot} onPress={handleAddDependentPhoto}>
-                <Text style={styles.plusSign}>+</Text>
-                <Text style={styles.addPhotoSubText}>Ekle</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
+          </View>
         </View>
-
-        {/* KANKA: O patlayan yeşil buton yerine buraya asil bir saman grisi/vizon mühür vurduk */}
-        <TouchableOpacity 
-          style={styles.editButton} 
-          onPress={() => {
-            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-          }}
-        >
-          <Text style={styles.editButtonText}>Albümü Tamamla ve Profili İncele</Text>
-        </TouchableOpacity>
 
       </ScrollView>
 
-      {/* ==================== TAM EKRAN ADIM ADIM KAYDIRMALI GALERİ MODALI ==================== */}
+      {/* ==================== CAROUSEL FULLSCREEN MODAL ==================== */}
       <Modal
         visible={isGalleryModalVisible}
         transparent={true} 
@@ -337,10 +544,7 @@ export default function ProfileScreen({ navigation }: any) {
                 <Ionicons name="trash-outline" size={18} color="#ff3b30" />
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.closeButton} 
-                onPress={() => setIsGalleryModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.closeButton} onPress={() => setIsGalleryModalVisible(false)}>
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -359,14 +563,114 @@ export default function ProfileScreen({ navigation }: any) {
           >
             {dependentPhotos.map((photoUri, index) => (
               <View key={`fullscreen-photo-${index}`} style={styles.fullscreenImageContainer}>
-                <Image 
-                  source={{ uri: photoUri }} 
-                  style={styles.fullscreenImage} 
-                  resizeMode="contain" 
-                />
+                <Image source={{ uri: photoUri }} style={styles.fullscreenImage} resizeMode="contain" />
               </View>
             ))}
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ==================== SAMAN GRİSİ SEÇİM PANELİ MODALI ==================== */}
+      <Modal
+        visible={isActionSheetVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsActionSheetVisible(false)}
+      >
+        <TouchableOpacity style={styles.actionSheetOverlay} activeOpacity={1} onPress={() => setIsActionSheetVisible(false)}>
+          <View style={styles.actionSheetContainer}>
+            <View style={styles.actionSheetDragLine} />
+            <Text style={styles.actionSheetTitle}>Kaynak Seçiniz</Text>
+            <TouchableOpacity style={styles.actionSheetRow} onPress={handleLaunchCamera} activeOpacity={0.7}>
+              <View style={styles.actionIconCircle}><Ionicons name="camera-outline" size={20} color="#2b231a" /></View>
+              <Text style={styles.actionSheetText}>Kamerayı Aç (Fotoğraf Çek)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionSheetRow} onPress={handleLaunchImageLibrary} activeOpacity={0.7}>
+              <View style={styles.actionIconCircle}><Ionicons name="image-outline" size={20} color="#2b231a" /></View>
+              <Text style={styles.actionSheetText}>Galeriye Git (Fotoğraf Seç)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionSheetRow, styles.actionSheetCancelRow]} onPress={() => setIsActionSheetVisible(false)} activeOpacity={0.7}>
+              <Text style={styles.actionSheetCancelText}>İptal</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ==================== DRAWER MENÜ MODALI ==================== */}
+      <Modal
+        visible={isSideMenuVisible}
+        transparent={true}
+        animationType="none"
+        onRequestClose={closeSideMenu}
+      >
+        <View style={styles.drawerOverlay}>
+          <TouchableOpacity style={styles.drawerCloseZone} activeOpacity={1} onPress={closeSideMenu} />
+          
+          <Animated.View style={[styles.drawerContainer, { transform: [{ translateX: sideMenuTranslateX }] }]}>
+            <View style={styles.drawerHeaderRow}>
+              <Text style={styles.drawerHeaderTitle}>Yönetim & Güvenlik</Text>
+              <TouchableOpacity onPress={closeSideMenu} style={styles.drawerCloseBtn}><Text style={{fontSize: 18, fontWeight: 'bold', color: '#636366'}}>✕</Text></TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+              
+              <Text style={styles.drawerSectionLabel}>HESAP VE GÜVENLİK</Text>
+              
+              <TouchableOpacity style={styles.drawerItemRow} onPress={handleMailChangePlaceholder} activeOpacity={0.7}>
+                <View style={styles.drawerIconCircle}><Ionicons name="mail-unread-outline" size={18} color="#2b231a" /></View>
+                <Text style={styles.drawerItemText}>E-posta Adresini Değiştir</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItemRow} onPress={handlePasswordReset} activeOpacity={0.7}>
+                <View style={styles.drawerIconCircle}><Ionicons name="lock-open-outline" size={18} color="#2b231a" /></View>
+                <Text style={styles.drawerItemText}>Şifre Değiştirme Maili Uçur</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.drawerSectionLabel}>KURUMSAL BİLGİ & DESTEK</Text>
+              
+              <TouchableOpacity style={styles.drawerItemRow} onPress={() => setIsFaqVisible(!isFaqVisible)} activeOpacity={0.7}>
+                <View style={styles.drawerIconCircle}><Ionicons name="help-circle-outline" size={18} color="#2b231a" /></View>
+                <Text style={styles.drawerItemText}>Sıkça Sorulan Sorular (FAQ)</Text>
+                <Ionicons name={isFaqVisible ? "chevron-up" : "chevron-down"} size={14} color="#636366" style={{ marginLeft: 'auto' }} />
+              </TouchableOpacity>
+              {isFaqVisible && (
+                <View style={styles.drawerDropdownContent}>
+                  <Text style={styles.faqQ}>• NFCTT UID çipi nasıl çalışır?</Text>
+                  <Text style={styles.faqA}>NFC çipi, canlının benzersiz Firestore UID profil linkini taşır. Herhangi bir telefon yaklaştırıldığında güvenli profil sayfası otomatik açılır kanka.</Text>
+                  <Text style={styles.faqQ}>• Konum bilgisi anlık alınır mı?</Text>
+                  <Text style={styles.faqA}>Çip tarandığı an veliye tarama koordinatları ve anlık bildirim akışı iletilir ciğerim.</Text>
+                </View>
+              )}
+
+              <TouchableOpacity style={styles.drawerItemRow} onPress={() => setIsAboutVisible(!isAboutVisible)} activeOpacity={0.7}>
+                <View style={styles.drawerIconCircle}><Ionicons name="document-text-outline" size={18} color="#2b231a" /></View>
+                <Text style={styles.drawerItemText}>Uygulama Amacı & Özet</Text>
+                <Ionicons name={isAboutVisible ? "chevron-up" : "chevron-down"} size={14} color="#636366" style={{ marginLeft: 'auto' }} />
+              </TouchableOpacity>
+              {isAboutVisible && (
+                <View style={styles.drawerDropdownContent}>
+                  <Text style={styles.aboutManifestoText}>
+                    NFCTT, kaybolma riski yüksek olan çocuk, evcil hayvan ve yaşlılarımızın güvenliğini sağlamak amacıyla geliştirilmiş NFC tabanlı yeni nesil bir güvence platformudur. Benzersiz UID atamaları sayesinde can dostlarımız ve sevdiklerimiz her an güvence altındadır.
+                  </Text>
+                </View>
+              )}
+
+              <Text style={[styles.drawerSectionLabel, { color: '#ff3b30', marginTop: 25 }]}>TEHLİKELİ BÖLGE</Text>
+              
+              <View style={styles.dangerZoneCardFrame}>
+                <TouchableOpacity style={styles.drawerItemRow} onPress={handleSignOut} activeOpacity={0.7}>
+                  <View style={[styles.drawerIconCircle, { backgroundColor: '#f2f2f7' }]}><Ionicons name="log-out-outline" size={18} color="#1c1c1e" /></View>
+                  <Text style={[styles.drawerItemText, { color: '#1c1c1e', fontWeight: '600' }]}>Oturumu Kapat</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.drawerItemRow, { borderBottomWidth: 0 }]} onPress={handleDeleteAccount} activeOpacity={0.7}>
+                  <View style={[styles.drawerIconCircle, { backgroundColor: 'rgba(255, 59, 48, 0.1)' }]}><Ionicons name="trash-outline" size={18} color="#ff3b30" /></View>
+                  <Text style={[styles.drawerItemText, { color: '#ff3b30', fontWeight: '700' }]}>Hesabımı Kalıcı Olarak Sil</Text>
+                </TouchableOpacity>
+              </View>
+
+            </ScrollView>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -377,26 +681,32 @@ export default function ProfileScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
-  scrollContainer: { padding: 15, paddingBottom: 110 },
+  scrollContainer: { padding: GRID_PADDING, paddingBottom: 60 },
+  headerCard: { backgroundColor: 'white', padding: 20, borderRadius: 15, alignItems: 'center', marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e5ea' },
   
-  // KANKA: Uydurma borderPlatformWidth silindi, burası tertemiz yapıldı
-  headerCard: { 
-    backgroundColor: 'white', 
-    padding: 20, 
-    borderRadius: 15, 
-    alignItems: 'center', 
-    marginBottom: 15, 
-    borderWidth: 0.5, 
-    borderColor: '#e5e5ea' 
-  },
-  
+  topNavigationHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 50 : 45, paddingBottom: 12, backgroundColor: 'white', borderBottomWidth: 0.5, borderBottomColor: '#e5e5ea' },
+  topNavigationTitle: { fontSize: 16, fontWeight: '700', color: '#beaf9f', textTransform: 'uppercase', letterSpacing: 0.5 },
+  hamburgerMenuButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
+
+  avatarRowContainer: { position: 'relative', width: 85, height: 85, justifyContent: 'center', alignItems: 'center' },
   avatarWrapper: { zIndex: 999, height: 85, justifyContent: 'center', alignItems: 'center' },
-  avatarContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#1c1c1e', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#fff', elevation: 4 },
-  avatar: { width: '100%', height: '100%' },
-  avatarPlaceholder: { fontSize: 32, color: 'white' },
+  avatarContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#d1c7bd', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#fff', elevation: 4 },
+  
+  // 🔥 KANKA: TYPESCRIPT'İ ÇILDIRTAN RESİM STİLLERİ TAM OLARAK BURAYA PROPERTİ OLARAK BAĞLANDI!
+  avatar: { width: 80, height: 80, borderRadius: 40 },
+  gridImage: { width: FIXED_IMAGE_SIZE, height: FIXED_IMAGE_SIZE, borderRadius: 8 },
+  fullscreenImage: { width: width, height: height * 0.75 },
+
+  avatarPlaceholder: { fontSize: 32, color: '#2b231a', fontWeight: 'bold' },
+  editAvatarBadge: { position: 'absolute', bottom: 0, right: -4, backgroundColor: '#d1c7bd', width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', zIndex: 1000, borderWidth: 1.5, borderColor: 'white', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1.41, elevation: 2 },
+
   userName: { fontSize: 20, fontWeight: '700', color: '#1c1c1e', marginTop: 10 },
   userSubText: { fontSize: 13, color: '#8e8e93', marginTop: 2, fontWeight: '500' },
-  infoCard: { backgroundColor: 'white', padding: 15, borderRadius: 15, marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e5ea' },
+  
+  infoCard: { backgroundColor: 'white', paddingHorizontal: CARD_INTERNAL_PADDING, paddingVertical: 12, borderRadius: 15, marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e5ea' },
+  accordionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  accordionContent: { width: '100%' },
+
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#1c1c1e' },
   divider: { height: 0.5, backgroundColor: '#e5e5ea', marginVertical: 10 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: '#f5f5f5' },
@@ -406,60 +716,50 @@ const styles = StyleSheet.create({
   noteBox: { backgroundColor: '#f4f1ea', padding: 12, borderRadius: 10, marginTop: 12, borderWidth: 0.5, borderColor: '#dcd7cd' },
   noteText: { fontSize: 13, color: '#5c5245', lineHeight: 18 },
   
-  galleryScroll: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
-  galleryItemContainer: { width: 80, height: 80, borderRadius: 10, marginRight: 12, overflow: 'hidden', backgroundColor: '#eee', borderWidth: 1, borderColor: '#ddd' },
-  galleryImage: { width: '100%', height: '100%' },
+  instagramGridContainer: { flexDirection: 'column', width: '100%', paddingVertical: 5 },
+  gridRowLayout: { flexDirection: 'row', width: '100%', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 },
   
-  addPhotoSlot: { width: 80, height: 80, borderRadius: 10, borderWidth: 1.5, borderColor: '#1c1c1e', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: '#fdfdfd' },
-  plusSign: { fontSize: 24, color: '#1c1c1e', fontWeight: '400', marginTop: -2 },
-  addPhotoSubText: { fontSize: 11, color: '#1c1c1e', fontWeight: '600', marginTop: -2 },
+  gridImageWrapper: { width: FIXED_IMAGE_SIZE, height: FIXED_IMAGE_SIZE, borderRadius: 8, overflow: 'hidden', backgroundColor: '#f2f2f7', borderWidth: 0.5, borderColor: '#e5e5ea', marginRight: 8 },
+  gridAddPhotoSlot: { width: FIXED_IMAGE_SIZE, height: FIXED_IMAGE_SIZE, borderRadius: 8, borderWidth: 1.5, borderColor: '#beaf9f', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: '#fdfdfd', marginRight: 8 },
+  plusSign: { fontSize: 22, color: '#beaf9f', fontWeight: '400', marginTop: -2 },
+  addPhotoSubText: { fontSize: 11, color: '#beaf9f', fontWeight: '600', marginTop: -2 },
 
-  editButton: { backgroundColor: '#d1c7bd', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10, borderWidth: 0.5, borderColor: '#beaf9f' },
-  editButtonText: { color: '#2b231a', fontWeight: '700', fontSize: 15, letterSpacing: 0.3 },
-
-  modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'center', alignItems: 'center' },
-  modalHeader: { 
-    width: '100%', 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 20, 
-    paddingTop: Platform.OS === 'ios' ? 60 : 30, 
-    position: 'absolute', 
-    top: 0, 
-    zIndex: 10,
-    backgroundColor: 'transparent', 
-  },
-  counterBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)', 
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)'
-  },
-  modalCounter: { 
-    color: '#ffffff', 
-    fontSize: 14, 
-    fontWeight: '700'
-  },
-  closeButton: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    backgroundColor: 'rgba(255, 255, 255, 0.15)', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)'
-  },
-  closeButtonText: { 
-    color: '#ffffff', 
-    fontSize: 16, 
-    fontWeight: 'bold' 
-  },
+  modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.92)', justifyContent: 'center', alignItems: 'center' },
+  modalHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 60 : 30, position: 'absolute', top: 0, zIndex: 10 },
+  counterBadge: { backgroundColor: 'rgba(255, 255, 255, 0.15)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 0.5, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  modalCounter: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  closeButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 0.5, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  closeButtonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  
   modalScrollView: { width: width, height: height },
-  // KANKA: Araya giren sinsi 'Soyisim' kelimesi temizlendi, parantezler hizalandı
   fullscreenImageContainer: { width: width, height: height, justifyContent: 'center', alignItems: 'center' },
-  fullscreenImage: { width: width, height: height * 0.8 }
+
+  actionSheetOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  actionSheetContainer: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 25, width: '100%', alignItems: 'center' },
+  actionSheetDragLine: { width: 40, height: 5, backgroundColor: '#e5e5ea', borderRadius: 2.5, marginBottom: 15 },
+  actionSheetTitle: { fontSize: 15, fontWeight: '700', color: '#636366', marginBottom: 15, letterSpacing: 0.3 },
+  actionSheetRow: { flexDirection: 'row', width: '100%', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: '#f2f2f7' },
+  actionIconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#d1c7bd', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  actionSheetText: { fontSize: 15, fontWeight: '600', color: '#1c1c1e' },
+  actionSheetCancelRow: { justifyContent: 'center', borderBottomWidth: 0, marginTop: 12, backgroundColor: '#f2f2f7', borderRadius: 10, paddingVertical: 12 },
+  actionSheetCancelText: { fontSize: 15, fontWeight: '700', color: '#1c1c1e' },
+
+  drawerOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', flexDirection: 'row', justifyContent: 'flex-end' },
+  drawerCloseZone: { flex: 1, height: '100%' },
+  drawerContainer: { width: width * 0.78, height: '100%', backgroundColor: 'white', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 60 : 20, shadowColor: '#000', shadowOffset: { width: -2, height: 0 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 16 },
+  drawerHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 15, borderBottomWidth: 0.5, borderBottomColor: '#e5e5ea', marginBottom: 15 },
+  drawerHeaderTitle: { fontSize: 18, fontWeight: '700', color: '#2b231a' },
+  drawerCloseBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+  
+  drawerSectionLabel: { fontSize: 11, fontWeight: '700', color: '#beaf9f', letterSpacing: 1, marginTop: 18, marginBottom: 8 },
+  drawerItemRow: { flexDirection: 'row', width: '100%', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f2f2f7' },
+  drawerIconCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f4f1ea', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  drawerItemText: { fontSize: 14, fontWeight: '500', color: '#1c1c1e' },
+  
+  drawerDropdownContent: { backgroundColor: '#f8f9fa', padding: 12, borderRadius: 8, marginTop: 4, marginBottom: 4, borderWidth: 0.5, borderColor: '#e5e5ea' },
+  faqQ: { fontSize: 12, fontWeight: '700', color: '#beaf9f', marginBottom: 2 },
+  faqA: { fontSize: 12, color: '#636366', lineHeight: 16, marginBottom: 8 },
+  aboutManifestoText: { fontSize: 12, color: '#5c5245', lineHeight: 18, textAlign: 'justify' },
+
+  dangerZoneCardFrame: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 59, 48, 0.15)', paddingHorizontal: 10, marginTop: 5, overflow: 'hidden' }
 });

@@ -1,4 +1,4 @@
-package com.nfctt
+package com.anonymous.NFCTT
 
 import android.os.Build
 import android.os.Bundle
