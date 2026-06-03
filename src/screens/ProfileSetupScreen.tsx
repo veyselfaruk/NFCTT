@@ -23,7 +23,7 @@ import BottomBar from '../components/BottomBar';
 const ITEM_HEIGHT = 40; 
 
 // =========================================================================
-// 🔥 GERÇEK AŞAĞI-YUKARI KAYDIRMALI, ORTADAKİ ELEMANI SEÇEN CUSTOM WHEEL MOTORU
+// 🔥 KANKA: SONSUZ DÖNGÜYÜ VE CRASH RİSKİNİ SIFIRLAYAN AKILLI WHEEL MOTORU
 // =========================================================================
 interface ScrollWheelPickerProps {
   data: string[];
@@ -37,17 +37,20 @@ function ScrollWheelPicker({ data, selectedValue, onValueChange, initialFocusVal
   const pickerItems = [' ', ...data, ' '];
   const scrollViewRef = useRef<ScrollView>(null);
   const isInitialRender = useRef(true);
+  const lockScrollEvent = useRef(false);
 
   const scrollToValue = (value: string, animated = true) => {
     const targetValue = value || 'Seçiniz';
     const index = data.indexOf(targetValue);
     if (index !== -1 && scrollViewRef.current) {
+      lockScrollEvent.current = true;
       scrollViewRef.current.scrollTo({ y: index * ITEM_HEIGHT, animated });
+      setTimeout(() => { lockScrollEvent.current = false; }, 150);
     }
   };
 
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       if (selectedValue && selectedValue !== 'Seçiniz') {
         scrollToValue(selectedValue, false);
       } else if (initialFocusValue) {
@@ -56,11 +59,13 @@ function ScrollWheelPicker({ data, selectedValue, onValueChange, initialFocusVal
         scrollToValue('Seçiniz', false);
       }
       isInitialRender.current = false;
-    }, 100);
-  }, [selectedValue, initialFocusValue]);
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [selectedValue]);
 
   const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (isInitialRender.current) return;
+    if (isInitialRender.current || lockScrollEvent.current) return;
+    
     const yOffset = e.nativeEvent.contentOffset.y;
     const index = Math.round(yOffset / ITEM_HEIGHT);
     
@@ -95,9 +100,10 @@ function ScrollWheelPicker({ data, selectedValue, onValueChange, initialFocusVal
                   activeOpacity={0.7}
                   style={styles.wheelItemClickZone}
                   onPress={() => {
+                    if (lockScrollEvent.current) return;
                     onValueChange(item === 'Seçiniz' ? '' : item);
                     scrollToValue(item, true);
-                    if (autoCloseTrigger) setTimeout(autoCloseTrigger, 400); 
+                    if (autoCloseTrigger) setTimeout(autoCloseTrigger, 300); 
                   }}
                 >
                   <Text style={[
@@ -136,8 +142,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   const [parentAddress, setParentAddress] = useState(''); 
   const [parentNote, setParentNote] = useState('');
   const [districtList, setDistrictList] = useState<string[]>([]);
-  
-  // 🔥 KANKA: MEVCUT FOTOĞRAF URL'SİNİ HAFIZADA TUTUP KORUYACAK YENİ STATE
   const [existingPhotoUrl, setExistingPhotoUrl] = useState('');
 
   // --- BAĞIMLI STATE TANIMLARI ---
@@ -145,12 +149,14 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   const [dependentName, setDependentName] = useState('');
   const [dependentAge, setDependentAge] = useState(''); 
   const [dependentGender, setDependentGender] = useState('');
-  const [dependentHeightWeight, setDependentHeightWeight] = useState(''); 
+  const [dependentBoy, setDependentBoy] = useState('');
+  const [dependentKilo, setDependentKilo] = useState('');
   const [dependentChipNumber, setDependentChipNumber] = useState(''); 
   const [dependentBloodType, setDependentBloodType] = useState('');
   const [dependentNote, setDependentNote] = useState('');
   const [dependentSubCategory, setDependentSubCategory] = useState('');
 
+  // 🎯 KANKA: Orijinal verileri tutan "Devlet Arşivi" referansımız
   const dbBackupRef = useRef<any>(null);
 
   const getParentAgeItems = () => {
@@ -159,13 +165,9 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   };
 
   const getDependentAgeItems = () => {
-    if (dependentType === 'Evcil Hayvan') {
-      const items = Array.from({ length: 31 }, (_, i) => String(i));
-      return ['Seçiniz', ...items];
-    } else {
-      const items = Array.from({ length: 19 }, (_, i) => String(i));
-      return ['Seçiniz', ...items];
-    }
+    const limit = dependentType === 'Evcil Hayvan' ? 31 : 19;
+    const items = Array.from({ length: limit }, (_, i) => String(i));
+    return ['Seçiniz', ...items];
   };
 
   const getBoyItems = () => {
@@ -189,56 +191,62 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
           if (!isMounted) return;
 
           if (profileSnap.exists()) {
-            const rawData = profileSnap.data();
-            if (rawData) {
-              let firestoreData = rawData.finalData ? rawData.finalData : rawData;
-              if (!firestoreData?.parent?.name && rawData?.parent?.name) {
-                firestoreData = rawData;
-              }
-              if (firestoreData.parent) {
-                setParentName(String(firestoreData.parent.name || ''));
-                setParentPhone(String(firestoreData.parent.phone || ''));
-                setParentCity(String(firestoreData.parent.city || ''));
-                setParentDistrict(String(firestoreData.parent.district || ''));
-                setParentAddress(String(firestoreData.parent.address || ''));
-                setParentBackupPhone(String(firestoreData.parent.secondPhone || firestoreData.parent.backupPhone || ''));
-                setParentGender(String(firestoreData.parent.gender || ''));
-                setParentAge(String(firestoreData.parent.age || ''));
-                setParentBloodType(String(firestoreData.parent.bloodType || ''));
-                setParentNote(String(firestoreData.parent.note || ''));
-                
-                // 🔥 KANKA: Eğer Firebase'de zaten bir profil resmi varsa onu çekip kilitle!
-                setExistingPhotoUrl(firestoreData.parent.photoUrl || rawData.parent?.photoUrl || '');
-              }
-              const fDep = firestoreData.dependent || {};
-              const rDep = rawData.dependent || {};
-              dbBackupRef.current = { ...fDep };
-              setDependentName(String(fDep.name || rDep.name || firestoreData.name || rawData.name || ''));
-              setDependentChipNumber(String(fDep.chipNumber || rDep.chipNumber || firestoreData.chipNumber || rawData.chipNumber || ''));
-              setDependentNote(String(fDep.note || rDep.note || firestoreData.note || rawData.note || ''));
-              setDependentGender(String(fDep.gender || rDep.gender || firestoreData.gender || rawData.gender || ''));
-              setDependentBloodType(String(fDep.bloodType || rDep.bloodType || firestoreData.bloodType || rawData.bloodType || ''));
-              setDependentHeightWeight(String(fDep.heightWeight || firestoreData.heightWeight || rawData.heightWeight || ''));
+            const rawData = profileSnap.data() || {};
+            let firestoreData = rawData.finalData ? rawData.finalData : rawData;
+            
+            if (!firestoreData?.parent?.name && rawData?.parent?.name) {
+              firestoreData = rawData;
+            }
+            if (firestoreData && firestoreData.parent) {
+              setParentName(String(firestoreData.parent.name || ''));
+              setParentPhone(String(firestoreData.parent.phone || ''));
+              setParentCity(String(firestoreData.parent.city || ''));
+              setParentDistrict(String(firestoreData.parent.district || ''));
+              setParentAddress(String(firestoreData.parent.address || ''));
+              setParentBackupPhone(String(firestoreData.parent.secondPhone || firestoreData.parent.backupPhone || ''));
+              setParentGender(String(firestoreData.parent.gender || ''));
+              setParentAge(String(firestoreData.parent.age || ''));
+              setParentBloodType(String(firestoreData.parent.bloodType || ''));
+              setParentNote(String(firestoreData.parent.note || ''));
+              setExistingPhotoUrl(firestoreData.parent.photoUrl || rawData.parent?.photoUrl || '');
+            }
+            
+            const fDep = firestoreData?.dependent || {};
+            const rDep = rawData?.dependent || {};
+            
+            // 🔥 KANKA: İlk açılışta gelen tüm orijinal canlı paketini buraya mühürledik!
+            dbBackupRef.current = { ...fDep };
+            
+            setDependentName(String(fDep.name || rDep.name || ''));
+            setDependentChipNumber(String(fDep.chipNumber || rDep.chipNumber || ''));
+            setDependentNote(String(fDep.note || rDep.note || ''));
+            setDependentGender(String(fDep.gender || rDep.gender || ''));
+            setDependentBloodType(String(fDep.bloodType || rDep.bloodType || ''));
+            
+            const hw = String(fDep.heightWeight || '');
+            if (hw && hw.includes(' - ')) {
+              setDependentBoy(hw.split(' - ')[0] || '');
+              setDependentKilo(hw.split(' - ')[1] || '');
+            }
 
-              let currentType = String(fDep.category || fDep.type || rDep.category || rDep.type || firestoreData.category || firestoreData.type || rawData.type || '');
-              if (currentType && currentType !== 'Çocuk' && currentType !== 'Yaşlı') {
-                setDependentType('Evcil Hayvan');
-                setDependentSubCategory(currentType); 
-              } else {
-                setDependentType(currentType);
-                setDependentSubCategory('');
-              }
-              const rawAge = fDep.age || rDep.age || firestoreData.age || rawData.age || '';
-              if (rawAge) {
-                setDependentAge(String(rawAge).replace(/yaş/i, '').replace(/yaşında/i, '').trim());
-              }
+            let currentType = String(fDep.category || fDep.type || rDep.category || rDep.type || '');
+            if (currentType && currentType !== 'Çocuk' && currentType !== 'Yaşlı') {
+              setDependentType('Evcil Hayvan');
+              setDependentSubCategory(currentType); 
+            } else {
+              setDependentType(currentType);
+              setDependentSubCategory('');
+            }
+            const rawAge = fDep.age || rDep.age || '';
+            if (rawAge) {
+              setDependentAge(String(rawAge).replace(/yaş/i, '').trim());
             }
           } else {
             if (incomingName) setParentName(incomingName);
           }
         }
       } catch (error) {
-        console.error("[Veri Hatası] Senkronizasyon hatası:", error);
+        console.error("[Veri Hatası] Yeni kayıt setup kontrol sızıntısı engellendi:", error);
       } finally {
         if (isMounted) {
           setCheckingProfile(false);
@@ -254,52 +262,91 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     if (parentCity) {
       const districts = citiesAndDistricts.getDistrictsByCityCode(parentCity) || [];
       setDistrictList(districts);
-      if (!districts.includes(parentDistrict)) setParentDistrict('');
     } else {
       setDistrictList([]);
-      setParentDistrict('');
     }
   }, [parentCity]);
 
-  const notify = (title: string, message: string) => {
-    if (Platform.OS === 'web') alert(`${title}: ${message}`);
-    else Alert.alert(title, message);
-  };
+  // =========================================================================
+  // 🔥 KANKA: TÜR DEĞİŞİNCE ARŞİV KONTROLÜ YAPIP AKILLI TEMİZLİK YAPAN MOTOR
+  // =========================================================================
+  const handleCategorySelection = (selectedCategory: string) => {
+    if (dependentType === selectedCategory) return;
 
-  const getMissingParentFields = () => {
-    const missing = [];
-    if (!parentName.trim()) missing.push("Ad Soyad");
-    if (!parentPhone.trim()) missing.push("Telefon Numarası");
-    if (!parentCity) missing.push("Şehir (İl)");
-    if (!parentDistrict) missing.push("İlçe");
-    if (!parentAddress.trim()) missing.push("Detaylı Adres Tarifi");
-    return missing;
-  };
+    const backupDep = dbBackupRef.current || {};
+    let originalCategory = backupDep.category || backupDep.type || '';
+    
+    // Eğer veritabanındaki tür kedi/köpek gibi bir şeyse onu 'Evcil Hayvan' şemsiyesine çekiyoruz kanka
+    if (originalCategory && originalCategory !== 'Çocuk' && originalCategory !== 'Yaşlı') {
+      originalCategory = 'Evcil Hayvan';
+    }
 
-  const getMissingDependentFields = () => {
-    const missing = [];
-    if (!dependentType) missing.push("Kayıp Profil Türü");
-    if (!dependentName.trim()) missing.push("Canlı İsim Alanı");
-    return missing;
+    setOpenPickerId(null);
+
+    if (selectedCategory === originalCategory) {
+      // 🎯 BİNGO: Kullanıcı veritabanındaki orijinal türüne geri döndü! Arşivi boşaltıyoruz kanka:
+      console.log('[Sistem] Kullanıcı orijinal türüne döndü, arşiv verileri geri yükleniyor...');
+      
+      setDependentType(selectedCategory);
+      setDependentName(String(backupDep.name || ''));
+      setDependentChipNumber(String(backupDep.chipNumber || ''));
+      setDependentNote(String(backupDep.note || ''));
+      setDependentGender(String(backupDep.gender || ''));
+      setDependentBloodType(String(backupDep.bloodType || ''));
+      
+      const hw = String(backupDep.heightWeight || '');
+      if (hw && hw.includes(' - ')) {
+        setDependentBoy(hw.split(' - ')[0] || '');
+        setDependentKilo(hw.split(' - ')[1] || '');
+      } else {
+        setDependentBoy('');
+        setDependentKilo('');
+      }
+
+      if (selectedCategory === 'Evcil Hayvan') {
+        setDependentSubCategory(backupDep.category || backupDep.type || '');
+      } else {
+        setDependentSubCategory('');
+      }
+
+      const rawAge = backupDep.age || '';
+      if (rawAge) {
+        setDependentAge(String(rawAge).replace(/yaş/i, '').trim());
+      } else {
+        setDependentAge('');
+      }
+    } else {
+      // 🧹 AKILLI TEMİZLİKÇİ: Farklı bir tür seçildi, ortak inputlar dahil her yeri sıfırla kanka!
+      console.log('[Sistem] Farklı bir tür seçildi, form sıfırlanıyor...');
+      setDependentType(selectedCategory);
+      setDependentSubCategory('');
+      setDependentName('');
+      setDependentChipNumber('');
+      setDependentAge('');
+      setDependentBoy('');
+      setDependentKilo('');
+      setDependentGender('');
+      setDependentBloodType('');
+      setDependentNote('');
+    }
   };
 
   const handleSaveAll = async () => {
-    const missingParent = getMissingParentFields();
-    const missingDependent = getMissingDependentFields();
-
-    if (missingParent.length > 0) {
-      notify('Eksik Veli Bilgisi', `Lütfen zorunlu alanları doldurunuz:\n\n• ${missingParent.join('\n• ')}`);
-      setActiveTab('parent'); 
-      return; 
+    if (!parentName.trim() || !parentPhone.trim() || !parentCity || !parentDistrict || !parentAddress.trim()) {
+      Alert.alert('Eksik Veli Bilgisi', 'Lütfen veli kısmındaki zorunlu (*) alanları doldurun.');
+      setActiveTab('parent');
+      return;
     }
-    if (missingDependent.length > 0) {
-      notify('Eksik Canlı Bilgisi', `Lütfen zorunlu alanları doldurunuz:\n\n• ${missingDependent.join('\n• ')}`);
-      setActiveTab('dependent'); 
-      return; 
+    if (!dependentType || !dependentName.trim()) {
+      Alert.alert('Eksik Canlı Bilgisi', 'Lütfen canlı profil türünü ve ismini doldurun kanka.');
+      setActiveTab('dependent');
+      return;
     }
 
     setIsDataLoading(true);
     
+    const hwValue = dependentBoy || dependentKilo ? `${dependentBoy || '120 cm'} - ${dependentKilo || '30 kg'}` : '';
+
     const finalData = {
       dependent: {
         type: (dependentType === 'Evcil Hayvan') ? dependentSubCategory : dependentType,
@@ -309,9 +356,9 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
         gender: dependentGender || 'Erkek',
         chipNumber: (dependentType === 'Evcil Hayvan') ? dependentChipNumber.trim() : '',
         note: dependentNote.trim() || '',
-        heightWeight: dependentHeightWeight || '120 cm - 30 kg',
+        heightWeight: hwValue,
         bloodType: dependentBloodType || 'Belirtilmedi',
-        photos: dbBackupRef.current?.photos || [] // Orijinal albüm fotoğraflarını da ezme kanka koru
+        photos: dbBackupRef.current?.photos || [] 
       },
       parent: {
         name: parentName.trim(),
@@ -324,18 +371,17 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
         age: (parentAge && parentAge !== 'Seçiniz') ? parentAge : '35',
         bloodType: parentBloodType || 'Belirtilmedi',
         note: parentNote.trim() || '',
-        // 🔥 KANKA: ARTIK MEVCUT RESİM URL'İNİ EZMİYORUZ, OLDUĞU GİBİ KORUYORUZ!
         photoUrl: existingPhotoUrl 
       }
     };
 
     try {
       await saveProfileToFirebase(finalData); 
-      notify('Başarılı', 'Profil bilgileriniz sisteme başarıyla kaydedilmiştir.');
+      Alert.alert('Başarılı', 'Profil kurulumu başarıyla tamamlandı reis.');
       navigation.reset({ index: 0, routes: [{ name: 'ProfileScreen' }] });
     } catch (error) {
       console.error("[Firestore Hatası] Yazma hatası:", error);
-      navigation.reset({ index: 0, routes: [{ name: 'ProfileScreen' }] });
+      navigation.reset({ index: 1, routes: [{ name: 'Home' }, { name: 'ProfileScreen' }] });
     } finally {
       setIsDataLoading(false);
     }
@@ -347,7 +393,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
   if (checkingProfile) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' }}>
+      <View style={styles.centerLoad}>
         <ActivityIndicator size="large" color="#beaf9f" />
       </View>
     );
@@ -363,16 +409,16 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
         <View style={styles.tabContainer}>
           <TouchableOpacity style={[styles.tabButton, activeTab === 'parent' && styles.tabButtonActive]} onPress={() => setActiveTab('parent')}>
-            <Text style={[styles.tabButtonText, activeTab === 'parent' && styles.tabButtonTextActive]}>Veli Bilgileri</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'parent' && styles.tabButtonTextActive]}>1. Veli Bilgileri</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.tabButton, activeTab === 'dependent' && styles.tabButtonActive]} onPress={() => setActiveTab('dependent')}>
-            <Text style={[styles.tabButtonText, activeTab === 'dependent' && styles.tabButtonTextActive]}>Koruma Altındaki Canlı</Text>
+            <Text style={[styles.tabButtonText, activeTab === 'dependent' && styles.tabButtonTextActive]}>2. Koruma Altındaki Canlı</Text>
           </TouchableOpacity>
         </View>
 
         {activeTab === 'parent' && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Hesap Sahibi (Veli) Bilgileri</Text>
+            <Text style={styles.sectionTitle}>1. Hesap Sahibi (Veli) Bilgileri</Text>
             <Text style={styles.inputLabel}>İsim Soyisim *</Text>
             <TextInput placeholder="John Doe *" placeholderTextColor="#8e8e93" style={styles.input} onChangeText={setParentName} value={parentName} />
             
@@ -405,8 +451,8 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
             <Text style={styles.inputLabel}>Telefon Numarası *</Text>
             <TextInput placeholder="+905xxxxxxxx" placeholderTextColor="#8e8e93" style={styles.input} keyboardType="phone-pad" onChangeText={setParentPhone} value={parentPhone} />
             
-            <Text style={styles.inputLabel}>Yedek Telefon Numarası (Opsiyonel)</Text>
-            <TextInput placeholder="Yedek Telefon Numarası" placeholderTextColor="#8e8e93" style={styles.input} keyboardType="phone-pad" onChangeText={setParentBackupPhone} value={parentBackupPhone} />
+            <Text style={styles.inputLabel}>Yedek Telefon Numarası</Text>
+            <TextInput placeholder="Yedek Telefon" placeholderTextColor="#8e8e93" style={styles.input} keyboardType="phone-pad" onChangeText={setParentBackupPhone} value={parentBackupPhone} />
 
             <Text style={styles.inputLabel}>Kan Grubu</Text>
             <TouchableOpacity style={styles.customPickerBox} onPress={() => togglePicker('p-blood')}>
@@ -423,13 +469,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
             <Text style={styles.inputLabel}>İl *</Text>
             <View style={styles.pickerContainer}>
-              <Picker 
-                selectedValue={parentCity} 
-                onValueChange={(itemValue) => {
-                  setParentCity(itemValue);
-                  setOpenPickerId(null); 
-                }}
-              >
+              <Picker selectedValue={parentCity} onValueChange={(val) => { setParentCity(val); setOpenPickerId(null); }}>
                 <Picker.Item label="Şehir Seçiniz" value="" />
                 {(citiesAndDistricts.getCities() || []).map((city: any) => (
                   <Picker.Item key={city.code} label={city.name} value={city.code} />
@@ -439,58 +479,29 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
             <Text style={styles.inputLabel}>İlçe *</Text>
             <View style={styles.pickerContainer}>
-              <Picker 
-                selectedValue={parentDistrict} 
-                onValueChange={(itemValue) => setParentDistrict(itemValue)} 
-                enabled={parentCity !== ''}
-              >
+              <Picker selectedValue={parentDistrict} onValueChange={(val) => setParentDistrict(val)} enabled={parentCity !== ''}>
                 <Picker.Item label="İlçe Seçiniz" value="" />
-                {(districtList || []).map((district: string, idx: number) => (
-                  <Picker.Item key={`dist-${idx}`} label={district} value={district} />
+                {(districtList || []).map((d: string, idx: number) => (
+                  <Picker.Item key={`dist-${idx}`} label={d} value={d} />
                 ))}
               </Picker>
             </View>
 
             <Text style={styles.inputLabel}>Detaylı Adres Tarifi *</Text>
             <TextInput placeholder="Adres tarifi..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 80 }]} multiline onChangeText={setParentAddress} value={parentAddress} />
-            
-            <Text style={styles.inputLabel}>Ek Not (Kronik rahatsızlık, alerji vb.)</Text>
-            <TextInput placeholder="Ek notlar..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 60 }]} multiline onChangeText={setParentNote} value={parentNote} />
           </View>
         )}
 
         {activeTab === 'dependent' && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Koruma Altındaki Canlı (Kayıp Türü)</Text>
+            <Text style={styles.sectionTitle}>2. Koruma Altındaki Canlı (Kayıp Türü)</Text>
             <Text style={styles.label}>Kayıp Profil Türünü Seçin:</Text>
             <View style={styles.typeButtonContainer}>
               {['Çocuk', 'Evcil Hayvan', 'Yaşlı'].map((type) => (
                 <TouchableOpacity 
                   key={type}
                   style={[styles.typeButton, (dependentType === type || (type === 'Evcil Hayvan' && ['Kedi', 'Köpek', 'Kuş', 'Kemirgen', 'Sürüngen/Akvaryum', 'Diğer'].includes(dependentType))) && styles.typeButtonSelected]}
-                  onPress={() => {
-                    if (dependentType === type) return;
-                    setDependentType(type);
-                    setOpenPickerId(null); 
-                    
-                    const originalDependent = dbBackupRef.current || {};
-                    const originalType = String(originalDependent?.category || originalDependent?.type || '');
-                    
-                    if ((originalType === 'Çocuk' || originalType === 'Yaşlı') && type === originalType || (originalType !== 'Çocuk' && originalType !== 'Yaşlı' && originalType !== '') && type === 'Evcil Hayvan') {
-                      setDependentName(String(originalDependent?.name || ''));
-                      setDependentGender(String(originalDependent?.gender || ''));
-                      setDependentNote(String(originalDependent?.note || ''));
-                      setDependentChipNumber(String(originalDependent?.chipNumber || ''));
-                      setDependentBloodType(String(originalDependent?.bloodType || ''));
-                      setDependentHeightWeight(String(originalDependent?.heightWeight || ''));
-                      if (originalDependent?.age) setDependentAge(String(originalDependent.age).replace(/yaş/i, '').trim());
-                      if (originalType !== 'Çocuk' && originalType !== 'Yaşlı') setDependentSubCategory(originalType);
-                    } else {
-                      setDependentName(''); setDependentAge(''); setDependentGender('');
-                      setDependentHeightWeight(''); setDependentBloodType(''); setDependentNote('');
-                      setDependentChipNumber(''); setDependentSubCategory('');
-                    }
-                  }}
+                  onPress={() => handleCategorySelection(type)} // 🔥 Kanka akıllı fonksiyonu buraya bağladık
                 >
                   <Text style={[styles.typeButtonText, (dependentType === type || (type === 'Evcil Hayvan' && ['Kedi', 'Köpek', 'Kuş', 'Kemirgen', 'Sürüngen/Akvaryum', 'Diğer'].includes(dependentType))) && styles.typeButtonTextSelected]}>{type}</Text>
                 </TouchableOpacity>
@@ -499,9 +510,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
             {dependentType !== '' && (
               <View style={{ marginTop: 10 }}>
-                <Text style={styles.subLabel}>
-                  {['Kedi', 'Köpek', 'Kuş', 'Kemirgen', 'Sürüngen/Akvaryum', 'Diğer'].includes(dependentType) ? 'Evcil Hayvan' : dependentType} Detaylı Bilgileri
-                </Text>
+                <Text style={styles.subLabel}>{dependentType} Detaylı Bilgileri</Text>
                 
                 <Text style={styles.inputLabel}>{dependentType === 'Evcil Hayvan' ? "Evcil Hayvanın Adı *" : "İsim Soyisim *"}</Text>
                 <TextInput placeholder="İsim giriniz *" placeholderTextColor="#8e8e93" style={styles.input} onChangeText={setDependentName} value={dependentName} />
@@ -553,33 +562,27 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                   <View>
                     <Text style={styles.inputLabel}>Boy</Text>
                     <TouchableOpacity style={styles.customPickerBox} onPress={() => togglePicker('d-boy')}>
-                      <Text style={styles.pickerBoxText}>{(dependentHeightWeight?.includes(' - ')) ? dependentHeightWeight.split(' - ')[0] : 'Seçiniz'}</Text>
+                      <Text style={styles.pickerBoxText}>{dependentBoy || 'Seçiniz'}</Text>
                     </TouchableOpacity>
                     {openPickerId === 'd-boy' && (
                       <ScrollWheelPicker
-                        selectedValue={(dependentHeightWeight?.includes(' - ')) ? dependentHeightWeight.split(' - ')[0] : ''}
+                        selectedValue={dependentBoy}
                         data={getBoyItems()}
                         initialFocusValue="120 cm" 
-                        onValueChange={(val) => {
-                          const currentWeight = (dependentHeightWeight?.includes(' - ')) ? dependentHeightWeight.split(' - ')[1] || '' : '';
-                          setDependentHeightWeight(val || currentWeight ? `${val} - ${currentWeight}` : '');
-                        }}
+                        onValueChange={(val) => setDependentBoy(val)}
                       />
                     )}
 
                     <Text style={styles.inputLabel}>Kilo</Text>
                     <TouchableOpacity style={styles.customPickerBox} onPress={() => togglePicker('d-kilo')}>
-                      <Text style={styles.pickerBoxText}>{(dependentHeightWeight?.includes(' - ')) ? dependentHeightWeight.split(' - ')[1] : 'Seçiniz'}</Text>
+                      <Text style={styles.pickerBoxText}>{dependentKilo || 'Seçiniz'}</Text>
                     </TouchableOpacity>
                     {openPickerId === 'd-kilo' && (
                       <ScrollWheelPicker
-                        selectedValue={(dependentHeightWeight?.includes(' - ')) ? dependentHeightWeight.split(' - ')[1] : ''}
+                        selectedValue={dependentKilo}
                         data={getKiloItems()}
                         initialFocusValue="30 kg" 
-                        onValueChange={(val) => {
-                          const currentBoy = (dependentHeightWeight?.includes(' - ')) ? dependentHeightWeight.split(' - ')[0] || '' : '';
-                          setDependentHeightWeight(currentBoy || val ? `${currentBoy} - ${val}` : '');
-                        }}
+                        onValueChange={(val) => setDependentKilo(val)}
                       />
                     )}
                     
@@ -606,9 +609,9 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                 )}
 
                 <Text style={styles.inputLabel}>Ek Not</Text>
-                <TextInput placeholder={dependentType === 'Evcil Hayvan' ? "Tasmasındaki künye no..." : "Alerji, kritik ilaçlar..."} placeholderTextColor="#8e8e93" style={[styles.input, { height: 70 }]} multiline onChangeText={setDependentNote} value={dependentNote} />
+                <TextInput placeholder="Kritik notlar..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 70 }]} multiline onChangeText={setDependentNote} value={dependentNote} />
 
-                <View style={{ marginTop: 15 }}>
+                <View style={{ marginTop: 20 }}>
                   <TouchableOpacity disabled={isDataLoading} style={styles.primaryButton} onPress={handleSaveAll}>
                     {isDataLoading ? <ActivityIndicator size="small" color="#2b231a" /> : <Text style={styles.buttonText}>Kurulumu Tamamla ve Kaydet</Text>}
                   </TouchableOpacity>
@@ -625,14 +628,15 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa', padding: 15 },
-  header: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Platform.OS === 'ios' ? 40 : 35, marginBottom: 15 },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#beaf9f' },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#e5e5ea', borderRadius: 10, padding: 4, marginBottom: 15, width: '100%', alignSelf: 'center' },
+  centerLoad: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
+  header: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Platform.OS === 'ios' ? 45 : 45, marginBottom: 15 },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#1c1c1e' },
+  tabContainer: { flexDirection: 'row', backgroundColor: '#e5e5ea', borderRadius: 10, padding: 4, marginBottom: 15, width: '100%' },
   tabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
   tabButtonActive: { backgroundColor: 'white', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 2 },
   tabButtonText: { fontSize: 13, fontWeight: '600', color: '#636366' },
   tabButtonTextActive: { color: '#beaf9f', fontWeight: '700' },
-  card: { backgroundColor: 'white', padding: 20, borderRadius: 15, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, width: Platform.OS === 'web' ? 400 : '100%', alignSelf: 'center', borderWidth: 0.5, borderColor: '#e5e5ea' },
+  card: { backgroundColor: 'white', padding: 20, borderRadius: 15, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, width: '100%', borderWidth: 0.5, borderColor: '#e5e5ea' },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 15, color: '#beaf9f', textTransform: 'uppercase', letterSpacing: 0.5 },
   label: { fontSize: 14, fontWeight: 'bold', color: '#48484a', marginBottom: 10 },
   subLabel: { fontSize: 15, fontWeight: 'bold', color: '#1c1c1e', marginVertical: 5, borderBottomWidth: 1, borderColor: '#f2f2f7', paddingBottom: 5 },
@@ -640,16 +644,14 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#f2f2f7', padding: 12, borderRadius: 8, marginBottom: 4, fontSize: 15, color: '#000' },
   customPickerBox: { backgroundColor: '#f2f2f7', padding: 14, borderRadius: 8, marginBottom: 4, borderWidth: 0.5, borderColor: '#e5e5ea', justifyContent: 'center' },
   pickerBoxText: { fontSize: 15, color: '#1c1c1e', fontWeight: '500' },
-  pickerContainer: { backgroundColor: '#f2f2f7', borderRadius: 8, marginBottom: 4, overflow: 'hidden', justifyContent: 'center', borderWidth: 0.5, borderColor: '#e5e5ea' },
-
-  wheelWrapper: { backgroundColor: '#f2f2f7', borderRadius: 10, borderWidth: 0.5, borderColor: '#beaf9f', marginVertical: 6, height: ITEM_HEIGHT * 3, overflow: 'hidden', justifyContent: 'center', position: 'relative' },
+  pickerContainer: { backgroundColor: '#f2f2f7', borderRadius: 8, marginBottom: 4, overflow: 'hidden', borderWidth: 0.5, borderColor: '#e5e5ea' },
+  wheelWrapper: { backgroundColor: '#f2f2f7', borderRadius: 10, borderWidth: 0.5, borderColor: '#beaf9f', marginVertical: 6, height: ITEM_HEIGHT * 3, overflow: 'hidden', position: 'relative' },
   wheelSelectionIndicator: { position: 'absolute', top: ITEM_HEIGHT, left: 0, right: 0, height: ITEM_HEIGHT, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#beaf9f', backgroundColor: 'rgba(209, 199, 189, 0.2)' },
   wheelScrollView: { width: '100%', height: '100%' },
   wheelItem: { height: ITEM_HEIGHT, justifyContent: 'center', alignItems: 'center', width: '100%' },
   wheelItemClickZone: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   wheelItemText: { fontSize: 15, color: '#8e8e93', fontWeight: '500' },
   wheelItemTextSelected: { color: '#2b231a', fontWeight: '700', fontSize: 16 },
-
   typeButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, gap: 10, marginTop: 5 },
   typeButton: { flex: 1, padding: 12, backgroundColor: '#f2f2f7', borderRadius: 10, alignItems: 'center', borderWidth: 0.5, borderColor: '#e5e5ea' },
   typeButtonSelected: { backgroundColor: '#d1c7bd', borderColor: '#beaf9f' },

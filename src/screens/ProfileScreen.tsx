@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  Image, Platform, ActivityIndicator, Animated, Dimensions, Modal, Alert
+  Image, Platform, ActivityIndicator, Animated, Dimensions, Modal, Alert, BackHandler
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { auth, db, storage } from '../config/firebaseConfig'; 
-import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, collection, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; 
 import BottomBar from '../components/BottomBar';
 import { Ionicons } from '@expo/vector-icons'; 
@@ -18,7 +18,11 @@ const CARD_INTERNAL_PADDING = 15;
 const VISIBLE_WIDTH = width - (GRID_PADDING * 2) - (CARD_INTERNAL_PADDING * 2);
 const FIXED_IMAGE_SIZE = (VISIBLE_WIDTH - 16) / 3;
 
-export default function ProfileScreen({ navigation }: any) {
+export default function ProfileScreen({ route, navigation }: any) {
+  // 🔍 KANKA: NFC VEYA LİNKTEN GELEN HEDEF UID VAR MI KONTROLÜ
+  const targetUid = route?.params?.targetUid;
+  const isFinderMode = !!targetUid; // targetUid varsa sayfa BULUCU MODUNDADIR.
+
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false); 
   const [avatarUploading, setAvatarUploading] = useState(false); 
@@ -26,8 +30,9 @@ export default function ProfileScreen({ navigation }: any) {
   const [dependentPhotos, setDependentPhotos] = useState<string[]>([]);
   const [isAvatarExpanded, setIsAvatarExpanded] = useState(false);
 
-  const [isParentExpanded, setIsParentExpanded] = useState(false);
-  const [isDependentExpanded, setIsDependentExpanded] = useState(false);
+  // 🛡️ Bulucu modunda akordeonlar direkt açık gelsin, kendi modunda kapalı başlasın kanka
+  const [isParentExpanded, setIsParentExpanded] = useState(isFinderMode);
+  const [isDependentExpanded, setIsDependentExpanded] = useState(isFinderMode);
 
   const [isGalleryModalVisible, setIsGalleryModalVisible] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
@@ -43,12 +48,59 @@ export default function ProfileScreen({ navigation }: any) {
   const avatarScale = useRef(new Animated.Value(1)).current;
   const sideMenuTranslateX = useRef(new Animated.Value(width)).current;
 
+  // 🛡️ KVKK SANSÜR / MASKELEME MOTORU
+  const maskText = (text: string, type: 'phone' | 'address') => {
+    if (!text) return "Belirtilmemiş";
+    if (type === 'phone') {
+      return text.length > 6 
+        ? `${text.substring(0, 4)} *** ** ${text.substring(text.length - 2)}` 
+        : "****";
+    }
+    if (type === 'address') {
+      return text.length > 15 
+        ? `${text.substring(0, 15)} **************************` 
+        : "**************************";
+    }
+    return text;
+  };
+
+  // 🎯 GELDİĞİN YERE DÖNEN, GEÇMİŞ YOKSA HOME'A KIRAN AKILLI KİLİT
+  useEffect(() => {
+    const backAction = () => {
+      if (navigation.isFocused()) {
+        if (isSideMenuVisible) {
+          closeSideMenu();
+          return true;
+        }
+        
+        try {
+          if (navigation.canGoBack()) {
+            navigation.goBack(); 
+          } else {
+            navigation.navigate('Home'); 
+          }
+          return true; 
+        } catch (e) {
+          return false;
+        }
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [navigation, isSideMenuVisible]);
+
+  // 📡 VERİ ÇEKME MOTORU (ÇİFT MOD DESTEKLİ)
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          const profileRef = doc(db, "profiles", currentUser.uid);
+        setLoading(true);
+        // 🔍 Kanka: Bulucuysak targetUid'yi, sahibiysek kendi uid'mizi sorguluyoruz
+        const uidToQuery = isFinderMode ? targetUid : auth.currentUser?.uid;
+        
+        if (uidToQuery) {
+          const profileRef = doc(db, "profiles", uidToQuery);
           const profileSnap = await getDoc(profileRef);
           
           if (profileSnap.exists()) {
@@ -62,6 +114,12 @@ export default function ProfileScreen({ navigation }: any) {
             setProfileData(actualData);
             const savedPhotos = rawData?.dependentPhotos || actualData?.dependent?.photos || [];
             setDependentPhotos([...savedPhotos].reverse());
+          } else {
+            if (!isFinderMode) {
+              navigation.navigate('ProfileSetupScreen');
+            } else {
+              Alert.alert("Sistem Hatası", "Bu akıllı etikete ait kurumsal profil kaydı bulunamadı.");
+            }
           }
         }
       } catch (error) {
@@ -72,7 +130,40 @@ export default function ProfileScreen({ navigation }: any) {
     };
 
     fetchProfile();
-  }, []);
+  }, [targetUid]);
+
+  // 💬 SAHİBİYLE GÜVENLİ İLETİŞİME GEÇ (ANONİM CHAT ODASI ENJEKSİYONU)
+  const handleStartChat = async () => {
+    try {
+      const currentUserId = auth.currentUser?.uid;
+      if (!currentUserId) {
+        Alert.alert("Oturum Gerekli", "Sohbet başlatabilmek için lütfen uygulamada oturum açınız.");
+        return;
+      }
+
+      if (currentUserId === targetUid) {
+        Alert.alert("Bilgi", "Kendi etiketinizle güvenli sohbet başlatamazsınız.");
+        return;
+      }
+
+      setLoading(true);
+      const chatRoomRef = collection(db, "chat_rooms");
+      const newRoom = await addDoc(chatRoomRef, {
+        participants: [currentUserId, targetUid],
+        createdAt: new Date().toISOString(),
+        lastMessage: "Güvenli sohbet başlatıldı...",
+        updatedAt: new Date().toISOString()
+      });
+
+      setLoading(false);
+      navigation.navigate('ChatScreen', { roomId: newRoom.id, targetUid: targetUid });
+
+    } catch (error) {
+      console.error("[Chat Initialization Error]:", error);
+      Alert.alert("Bağlantı Hatası", "Güvenli sohbet odası oluşturulamadı.");
+      setLoading(false);
+    }
+  };
 
   const openSideMenu = () => {
     setIsSideMenuVisible(true);
@@ -199,7 +290,7 @@ export default function ProfileScreen({ navigation }: any) {
 
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert("İzin Gerekli", "Kamerayı kullanabilmek için izin vermelisiniz.");
+      Alert.alert("İzin Gerekli", "Kamerayı kullanabilmek için izin vermeleniz gerekir.");
       return;
     }
 
@@ -254,9 +345,8 @@ export default function ProfileScreen({ navigation }: any) {
           try {
             setIsSideMenuVisible(false);
             await auth.signOut();
-            navigation.reset({ index: 0, routes: [{ name: 'UniversalLoginScreen' }] });
           } catch (e) {
-            Alert.alert("Hata", "Çıkış yapılırken bir sorun oluştu.");
+            console.error("Çıkış hatası:", e);
           }
         }
       }
@@ -281,7 +371,7 @@ export default function ProfileScreen({ navigation }: any) {
   const handleDeleteAccount = () => {
     Alert.alert(
       "⚠️ HESABI KALICI OLARAK SİL",
-      "Hesabınızı sildiğinizde veli kaydınız, tüm NFC UID mühürleriniz ve canlı albümleriniz kalıcı olarak yok edilecektir. Bu işlem geri alınamaz!",
+      "Hesabınızı sildiğinizde veli kaydınız, tüm NFC UID mühürleriniz ogüvence albümleriniz kalıcı olarak yok edilecektir. Bu işlem geri alınamaz!",
       [
         { text: "Vazgeç", style: "cancel" },
         {
@@ -292,13 +382,31 @@ export default function ProfileScreen({ navigation }: any) {
               const user = auth.currentUser;
               if (user) {
                 setIsSideMenuVisible(false);
+                
                 const profileRef = doc(db, "profiles", user.uid);
                 await deleteDoc(profileRef);
-                Alert.alert("Bilgi", "Hesap silme talebiniz başarıyla kurumsal veri tabanına işlendi.");
-                navigation.reset({ index: 0, routes: [{ name: 'UniversalLoginScreen' }] });
+                console.log("[Firestore] Profil verileri başarıyla yok edildi.");
+
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'UniversalLoginScreen' }],
+                });
+
+                await user.delete();
+                console.log("[Firebase Auth] Kullanıcı kaydı sistemden kalıcı olarak silindi.");
+
+                Alert.alert("Başarılı", "Hesabınız ve tüm kurumsal verileriniz sistemimizden kalıcı olarak kazınmıştır.");
               }
-            } catch (e) {
-              Alert.alert("Güvenlik Hatası", "Kritik işlemlerden önce yakın zamanda giriş yapmış olmanız gerekir.");
+            } catch (e: any) {
+              console.error("[Güvenlik Hatası] Hesap silinirken arıza çıktı:", e);
+              if (e.code === 'auth/requires-recent-login') {
+                Alert.alert(
+                  "Güvenlik Protokolü", 
+                  "Kritik hesap silme işlemlerinden önce yakın zamanda giriş yapmış olmanız gerekir. Lütfen çıkış yapıp tekrar girin."
+                );
+              } else {
+                Alert.alert("Hata", "Hesap silme işlemi gerçekleştirilemedi.");
+              }
             }
           }
         }
@@ -354,11 +462,12 @@ export default function ProfileScreen({ navigation }: any) {
     );
   }
 
-  const parent = profileData?.parent || {};
-  const dependent = profileData?.dependent || {};
+  const parent = profileData?.parent ? profileData.parent : { name: '', phone: '', age: '', gender: '', bloodType: '', district: '', city: '', address: '', note: '', photoUrl: '' };
+  const dependent = profileData?.dependent ? profileData.dependent : { type: 'Belirtilmemiş', name: '', age: '', gender: '', heightWeight: '', bloodType: '', chipNumber: '', note: '' };
 
   const slots: any[] = [...dependentPhotos];
-  if (slots.length < 6 && !uploading) {
+  // 🛡️ Kanka: Bulucu modundaysak albüme fotoğraf ekleme butonunu göstermiyoruz!
+  if (slots.length < 6 && !uploading && !isFinderMode) {
     slots.push('ADD_BUTTON_SLOT');
   }
 
@@ -372,10 +481,15 @@ export default function ProfileScreen({ navigation }: any) {
       
       {/* === TOP HEADER BAR === */}
       <View style={styles.topNavigationHeader}>
-        <Text style={styles.topNavigationTitle}>NFCTT Güvence Paneli</Text>
-        <TouchableOpacity style={styles.hamburgerMenuButton} onPress={openSideMenu} activeOpacity={0.7}>
-          <Ionicons name="menu-outline" size={26} color="#1c1c1e" />
-        </TouchableOpacity>
+        <Text style={styles.topNavigationTitle}>
+          {isFinderMode ? "🚨 ACİL DURUM GÜVENCE PANELİ" : "NFCTT Güvence Paneli"}
+        </Text>
+        {/* 🛡️ Bulucu modunda sağdaki ayarlar/hamburger menüsünü gizliyoruz kanka */}
+        {!isFinderMode && (
+          <TouchableOpacity style={styles.hamburgerMenuButton} onPress={openSideMenu} activeOpacity={0.7}>
+            <Ionicons name="menu-outline" size={26} color="#1c1c1e" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContainer}>
@@ -393,7 +507,8 @@ export default function ProfileScreen({ navigation }: any) {
               </Animated.View>
             </TouchableOpacity>
 
-            {!isAvatarExpanded && (
+            {/* 🛡️ Bulucu modunda avatar değiştirme kamerasını gizliyoruz */}
+            {!isAvatarExpanded && !isFinderMode && (
               <TouchableOpacity style={styles.editAvatarBadge} onPress={triggerAvatarSelect} activeOpacity={0.8}>
                 {avatarUploading ? (
                   <ActivityIndicator size="small" color="#2b231a" />
@@ -406,11 +521,13 @@ export default function ProfileScreen({ navigation }: any) {
           
           <View style={{ alignItems: 'center', marginTop: isAvatarExpanded ? 30 : 5 }}>
             <Text style={styles.userName}>{parent.name || 'İsim Soyisim'}</Text>
-            <Text style={styles.userSubText}>NFCTT Güvence Veli Profili</Text>
+            <Text style={styles.userSubText}>
+              {isFinderMode ? "🚨 KORUMA ALTINDAKİ KULLANICI PROFİLİ" : "NFCTT Güvence Veli Profili"}
+            </Text>
           </View>
         </View>
 
-        {/* === KART 1: VELİ BİLGİLERİ PANELİ === */}
+        {/* === KART 1: VELİ BİLGİLERİ PANELİ (SANSÜRLÜ / KVKK UYUMLU) === */}
         <View style={styles.infoCard}>
           <TouchableOpacity 
             style={styles.accordionHeader} 
@@ -424,11 +541,21 @@ export default function ProfileScreen({ navigation }: any) {
           {isParentExpanded && (
             <View style={styles.accordionContent}>
               <View style={styles.divider} />
-              <View style={styles.infoRow}><Text style={styles.infoLabel}>Telefon:</Text><Text style={styles.infoValue}>{parent.phone || '-'}</Text></View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Telefon:</Text>
+                <Text style={styles.infoValue}>
+                  {isFinderMode ? maskText(parent.phone, 'phone') : parent.phone || '-'}
+                </Text>
+              </View>
               <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{parent.age || '-'} Yaş / {parent.gender || '-'}</Text></View>
               <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{parent.bloodType || '-'}</Text></View>
               <View style={styles.infoRow}><Text style={styles.infoLabel}>Bölge:</Text><Text style={styles.infoValue}>{parent.district || '-'} / {citiesAndDistricts.getCities().find((c: any) => String(c.code) === String(parent.city))?.name || parent.city || '-'}</Text></View>
-              <View style={styles.infoRow}><Text style={styles.infoLabel}>Adres:</Text><Text style={styles.infoValue}>{parent.address || '-'}</Text></View>
+              <View style={styles.infoRow}
+              ><Text style={styles.infoLabel}>Adres:</Text>
+                <Text style={styles.infoValue}>
+                  {isFinderMode ? maskText(parent.address, 'address') : parent.address || '-'}
+                </Text>
+              </View>
               {parent.note ? (
                 <View style={styles.noteBox}><Text style={styles.noteText}><Text style={{fontWeight: 'bold'}}>Kritik Veli Notu:</Text> {parent.note}</Text></View>
               ) : null}
@@ -436,7 +563,7 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* === KART 2: KORUMA ALTINDAKİ CANLI PANELİ === */}
+        {/* === KART 2: KORUMA ALTINDAKİ CANLI PANELİ (SANSÜRSÜZ GÜVENLİK ALANI) === */}
         <View style={styles.infoCard}>
           <TouchableOpacity 
             style={styles.accordionHeader} 
@@ -453,7 +580,7 @@ export default function ProfileScreen({ navigation }: any) {
               <View style={styles.infoRow}><Text style={styles.infoLabel}>İsim:</Text><Text style={styles.infoValue}>{dependent.name || '-'}</Text></View>
               <View style={styles.infoRow}><Text style={styles.infoLabel}>Yaş / Cinsiyet:</Text><Text style={styles.infoValue}>{dependent.age || '-'} / {dependent.gender || '-'}</Text></View>
 
-              {(dependent.type === 'Çocuk' || dependent.type === 'Yaşlı') && (
+              {(dependent.type === 'Çocuk' || dependent.type === 'Yaşlı' || dependent.type === 'Belirtilmemiş') && (
                 <>
                   <View style={styles.infoRow}><Text style={styles.infoLabel}>Boy / Kilo:</Text><Text style={styles.infoValue}>{dependent.heightWeight || '-'}</Text></View>
                   <View style={styles.infoRow}><Text style={styles.infoLabel}>Kan Grubu:</Text><Text style={[styles.infoValue, {color: '#444', fontWeight: 'bold'}]}>{dependent.bloodType || '-'}</Text></View>
@@ -471,7 +598,7 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* === KART 3: İNSTAGRAM TARZI AKICI GRID ALBÜM PANELİ === */}
+        {/* === KART 3: ALBÜM PANELİ === */}
         <View style={styles.infoCard}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={styles.cardTitle}>Albüm / Fotoğraflar</Text>
@@ -521,6 +648,16 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
+        {/* =========================================================================
+            💬 🔥 KANKA: SAHİBİYLE GÜVENLİ İLETİŞİME GEÇ BUTONU (YALNIZCA BULUCU MODUNDA)
+            ========================================================================= */}
+        {isFinderMode && (
+          <TouchableOpacity style={styles.kurumsalChatButton} onPress={handleStartChat} activeOpacity={0.8}>
+            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
+            <Text style={styles.kurumsalChatButtonText}>SAHİBİYLE GÜVENLİ İLETİŞİME GEÇ</Text>
+          </TouchableOpacity>
+        )}
+
       </ScrollView>
 
       {/* ==================== CAROUSEL FULLSCREEN MODAL ==================== */}
@@ -537,12 +674,15 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
             
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity 
-                style={[styles.closeButton, { marginRight: 12, backgroundColor: 'rgba(255, 59, 48, 0.25)', borderColor: 'rgba(255, 59, 48, 0.3)' }]} 
-                onPress={handleDeletePhoto}
-              >
-                <Ionicons name="trash-outline" size={18} color="#ff3b30" />
-              </TouchableOpacity>
+              {/* 🛡️ Kanka: Bulucu modundaysak başkasının fotoğrafını silme butonunu gizliyoruz! */}
+              {!isFinderMode && (
+                <TouchableOpacity 
+                  style={[styles.closeButton, { marginRight: 12, backgroundColor: 'rgba(255, 59, 48, 0.25)', borderColor: 'rgba(255, 59, 48, 0.3)' }]} 
+                  onPress={handleDeletePhoto}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#ff3b30" />
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={styles.closeButton} onPress={() => setIsGalleryModalVisible(false)}>
                 <Text style={styles.closeButtonText}>✕</Text>
@@ -570,7 +710,7 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
       </Modal>
 
-      {/* ==================== SAMAN GRİSİ SEÇİM PANELİ MODALI ==================== */}
+      {/* ==================== KAYNAK SEÇİM PANELİ MODAL ==================== */}
       <Modal
         visible={isActionSheetVisible}
         transparent={true}
@@ -636,9 +776,9 @@ export default function ProfileScreen({ navigation }: any) {
               {isFaqVisible && (
                 <View style={styles.drawerDropdownContent}>
                   <Text style={styles.faqQ}>• NFCTT UID çipi nasıl çalışır?</Text>
-                  <Text style={styles.faqA}>NFC çipi, canlının benzersiz Firestore UID profil linkini taşır. Herhangi bir telefon yaklaştırıldığında güvenli profil sayfası otomatik açılır kanka.</Text>
+                  <Text style={styles.faqA}>NFC çipi, canlının benzersiz Firestore UID profil linkini taşır. Herhangi bir telefon yaklaştırıldığında güvenli profil sayfası otomatik açılır.</Text>
                   <Text style={styles.faqQ}>• Konum bilgisi anlık alınır mı?</Text>
-                  <Text style={styles.faqA}>Çip tarandığı an veliye tarama koordinatları ve anlık bildirim akışı iletilir ciğerim.</Text>
+                  <Text style={styles.faqA}>Çip tarandığı an veliye tarama koordinatları ve anlık bildirim akışı iletilir.</Text>
                 </View>
               )}
 
@@ -674,25 +814,25 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
       </Modal>
 
-      <BottomBar navigation={navigation} activeScreen="Profile" />
+      {/* 🛡️ Kanka: Bulucu modundaysak en alttaki navigasyon barını komple gizliyoruz ki adam bizim menülerde gezemesin! */}
+      {!isFinderMode && <BottomBar navigation={navigation} activeScreen="Profile" />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
-  scrollContainer: { padding: GRID_PADDING, paddingBottom: 60 },
+  scrollContainer: { padding: GRID_PADDING, paddingBottom: 100 },
   headerCard: { backgroundColor: 'white', padding: 20, borderRadius: 15, alignItems: 'center', marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e5ea' },
   
-  topNavigationHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 50 : 45, paddingBottom: 12, backgroundColor: 'white', borderBottomWidth: 0.5, borderBottomColor: '#e5e5ea' },
-  topNavigationTitle: { fontSize: 16, fontWeight: '700', color: '#beaf9f', textTransform: 'uppercase', letterSpacing: 0.5 },
+  topNavigationHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 45 : 45, paddingBottom: 12, backgroundColor: 'white', borderBottomWidth: 0.5, borderBottomColor: '#e5e5ea' },
+  topNavigationTitle: { fontSize: 14, fontWeight: '700', color: '#beaf9f', textTransform: 'uppercase', letterSpacing: 0.5 },
   hamburgerMenuButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
 
   avatarRowContainer: { position: 'relative', width: 85, height: 85, justifyContent: 'center', alignItems: 'center' },
   avatarWrapper: { zIndex: 999, height: 85, justifyContent: 'center', alignItems: 'center' },
   avatarContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#d1c7bd', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#fff', elevation: 4 },
   
-  // 🔥 KANKA: TYPESCRIPT'İ ÇILDIRTAN RESİM STİLLERİ TAM OLARAK BURAYA PROPERTİ OLARAK BAĞLANDI!
   avatar: { width: 80, height: 80, borderRadius: 40 },
   gridImage: { width: FIXED_IMAGE_SIZE, height: FIXED_IMAGE_SIZE, borderRadius: 8 },
   fullscreenImage: { width: width, height: height * 0.75 },
@@ -761,5 +901,9 @@ const styles = StyleSheet.create({
   faqA: { fontSize: 12, color: '#636366', lineHeight: 16, marginBottom: 8 },
   aboutManifestoText: { fontSize: 12, color: '#5c5245', lineHeight: 18, textAlign: 'justify' },
 
-  dangerZoneCardFrame: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 59, 48, 0.15)', paddingHorizontal: 10, marginTop: 5, overflow: 'hidden' }
+  dangerZoneCardFrame: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 59, 48, 0.15)', paddingHorizontal: 10, marginTop: 5, overflow: 'hidden' },
+
+  // 🔥 🛡️ KANKA: SIFIR ENJEKSİYON KURUMSAL CHAT BUTONU STYLES
+  kurumsalChatButton: { flexDirection: 'row', backgroundColor: '#1c1c1e', height: 56, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 10, marginBottom: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  kurumsalChatButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginLeft: 10, letterSpacing: 0.5 }
 });

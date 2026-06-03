@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, ActivityIndicator, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { getProfileForWeb } from './src/controllers/WebProfileController'; 
-import WebProfileView from './src/views/WebProfileView';
+//import WebProfileView from './src/views/WebProfileView';//
 import WebLoginScreen from './src/screens/UniversalLoginScreen';
 
 export default function App() {
@@ -69,7 +69,7 @@ export default function App() {
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          <WebProfileView profileData={profile} />
+          {/*<WebProfileView profileData={profile} />*/}
           <TouchableOpacity 
             style={styles.backButton} 
             onPress={() => { setProfile(null); setTagId(''); }}

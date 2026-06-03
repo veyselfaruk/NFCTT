@@ -98,10 +98,7 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
               if (onLoginSuccess) onLoginSuccess(loggedInUser);
               
               setLoading(false);
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }], 
-              });
+              
               return; 
             } else {
               console.log("Bu UID ile eşleşen bir profil dökümanı bulunamadı.");

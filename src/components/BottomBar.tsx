@@ -12,12 +12,23 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
   const activeColor = '#000000';
   const inactiveColor = '#8e8e93';
 
+  // =========================================================================
+  // 🔥 KANKA: RAM'İ ŞİŞİRMEYEN VE GEZİNME ÇÖKMELERİNİ BİTİREN KURUMSAL MOTOR
+  // =========================================================================
+  const handleTabPress = (targetRoute: string) => {
+    navigation.navigate({
+      name: targetRoute,
+      key: targetRoute, // 🎯 Ekranı RAM'de tekilleştirir, üst üste kopya açtırmaz!
+      merge: true,       // 🎯 Sayfa zaten geçmişte varsa state'ini koruyarak öne çeker.
+    });
+  };
+
   return (
     <View style={styles.bottomBar}>
       {/* 1. ANASAYFA */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Home' && navigation.navigate('Home')}
+        onPress={() => activeScreen !== 'Home' && handleTabPress('Home')}
       >
         <Ionicons 
           name={activeScreen === 'Home' ? "home" : "home-outline"} 
@@ -30,7 +41,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 2. AYARLAR */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Settings' && navigation.navigate('ProfileSetup')}
+        onPress={() => activeScreen !== 'Settings' && handleTabPress('ProfileSetup')}
       >
         <Ionicons 
           name={activeScreen === 'Settings' ? "settings" : "settings-outline"} 
@@ -43,7 +54,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 3. NFC TARAT */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => console.log("NFC Tarama tetiklendi...")}
+        onPress={() => navigation.navigate('Nfc')} // 🔥 Kanka sadece log basmıyor, artık direkt sayfaya şutluyor!
       >
         <Ionicons 
           name={activeScreen === 'NFC' ? "radio" : "radio-outline"} 
@@ -56,7 +67,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 4. MESAJLAR */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Chat' && navigation.navigate('ChatList')}
+        onPress={() => activeScreen !== 'Chat' && handleTabPress('ChatList')}
       >
         <Ionicons 
           name={activeScreen === 'Chat' ? "chatbox-ellipses" : "chatbox-ellipses-outline"} 
@@ -69,7 +80,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 5. PROFİLİM */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Profile' && navigation.navigate('ProfileScreen')}
+        onPress={() => activeScreen !== 'Profile' && handleTabPress('ProfileScreen')}
       >
         <Ionicons 
           name={activeScreen === 'Profile' ? "person" : "person-outline"} 
@@ -86,9 +97,9 @@ const styles = StyleSheet.create({
   bottomBar: { 
     flexDirection: 'row', 
     height: Platform.OS === 'ios' ? 85 : 68, 
-    backgroundColor: '#ffffff', // Beyaz zemin mühürlendi kanka
+    backgroundColor: '#ffffff', 
     borderTopWidth: 0.5, 
-    borderColor: '#e5e5ea', // Üst tarafa çok hafif, modern bir sınır çizgisi
+    borderColor: '#e5e5ea', 
     justifyContent: 'space-around', 
     alignItems: 'center', 
     paddingBottom: Platform.OS === 'ios' ? 18 : 0,
@@ -96,7 +107,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    // Hafif gölge kırılımı kanka
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
@@ -111,13 +121,13 @@ const styles = StyleSheet.create({
   },
   barText: { 
     fontSize: 10, 
-    color: '#8e8e93', // Pasif yazı gri
+    color: '#8e8e93', 
     fontWeight: '500',
     marginTop: 4,
     letterSpacing: 0.2
   },
   activeText: {
-    color: '#000000', // Aktif yazı net siyah kanka
+    color: '#000000', 
     fontWeight: '700'
   }
 });

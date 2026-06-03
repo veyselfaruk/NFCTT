@@ -4,47 +4,72 @@ import { View, Text, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
-// db ile birlikte hafıza (AsyncStorage) korumalı olan auth motorunu çekiyoruz
 import { db, auth } from './src/config/firebaseConfig'; 
-
-// onAuthStateChanged motorunu dinliyoruz
 import { onAuthStateChanged } from 'firebase/auth'; 
+import { doc, getDoc } from 'firebase/firestore'; 
 
-// Ekranlarımızı çağırıyoruz
-import LoginScreen from './src/screens/UniversalLoginScreen';
-import RegisterScreen from './src/screens/RegisterScreen'; // KANKA: Eksik olan import eklendi
+import UniversalLoginScreen from './src/screens/UniversalLoginScreen';
+import RegisterScreen from './src/screens/RegisterScreen'; 
 import ProfileSetupScreen from './src/screens/ProfileSetupScreen';
 import HomeScreen from './src/views/Home';
 import ProfileScreen from './src/screens/ProfileScreen'; 
 import ChatList from './src/views/ChatList';
 import ChatScreen from './src/views/ChatScreen'; 
+import NfcScreen from './src/screens/NfcScreen';
 import { LogBox } from 'react-native';
 
-// Firebase'in o hatalı ve inatçı AsyncStorage uyarısını terminalden gizliyoruz
 LogBox.ignoreLogs([
   '@firebase/auth: Auth (12.13.0): You are initializing Firebase Auth for React Native without providing AsyncStorage'
 ]);
 
 const Stack = createStackNavigator();
 
+// =========================================================================
+// 🎯 YÖNTEM B: PERFORMANS VE RAM DOSTU SABİT BİLEŞEN TANIMLAMASI
+// =========================================================================
+const LoadingPlaceholder = () => (
+  <View style={{ flex: 1, backgroundColor: '#f8f9fa' }} />
+);
+
 const App = () => {
   const [initializing, setInitializing] = useState<boolean>(true);
   const [user, setUser] = useState<any>(null);
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (userState) => {
+    const unsubscribe = onAuthStateChanged(auth, async (userState) => {
       setUser(userState);
-      if (initializing) setInitializing(false);
+      
+      if (userState) {
+        try {
+          console.log(`[Kök Doğrulama] Kullanıcı giriş yaptı... UID: ${userState.uid}`);
+          const profileRef = doc(db, "profiles", userState.uid);
+          const profileSnap = await getDoc(profileRef);
+          
+          if (profileSnap.exists()) {
+            console.log("Kayıtlı profil Firestore üzerinde başarıyla doğrulandı!");
+            setHasProfile(true);
+          } else {
+            console.log("Bu UID ile eşleşen bir profil dökümanı bulunamadı.");
+            setHasProfile(false);
+          }
+        } catch (error) {
+          console.error("[Kök Doğrulama Hatası] Profil durumu okunamadı:", error);
+          setHasProfile(false);
+        }
+      } else {
+        setHasProfile(null); // Oturum kapalıysa nötrle kanka
+      }
+      
+      setInitializing(false);
     });
 
-    return unsubscribe; // cleanup
-  }, [initializing]);
+    return unsubscribe; 
+  }, []);
 
-  // Yükleme ekranı (Boş beyaz ekranda kalmamak için)
   if (initializing) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' }}>
-        {/* KANKA: Yükleme ikonunu da kurumsal antrasit yaptık */}
         <ActivityIndicator size="large" color="#1c1c1e" />
         <Text style={{ marginTop: 14, fontSize: 14, color: '#8e8e93', fontWeight: '500', letterSpacing: 0.3 }}>
           NFCTT Hazırlanıyor...
@@ -56,30 +81,43 @@ const App = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        
-        {/* KANKA: ProfileSetup'ı ortak alana çekmek için yukarıdan sildik */}
         {user ? (
-          // === KORUMALI KATMAN (GİRİŞ YAPILDIYSA) ===
-          <>
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
-            <Stack.Screen name="ChatList" component={ChatList} />
-            <Stack.Screen name="ChatScreen" component={ChatScreen} />
-          </>
+          hasProfile === null ? (
+            <Stack.Screen name="LoadingPlaceholder" component={LoadingPlaceholder} />
+          ) : hasProfile ? (
+            <>
+              <Stack.Screen name="Home" component={HomeScreen} />
+              <Stack.Screen name="Nfc" component={NfcScreen} />
+              <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+              <Stack.Screen name="ChatList" component={ChatList} />
+              <Stack.Screen name="ChatScreen" component={ChatScreen} />
+              {/* 🟢 Kanka: name alanını "ProfileSetup" olarak güncelledik */}
+              <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} /> 
+              <Stack.Screen name="UniversalLoginScreen" component={UniversalLoginScreen} />
+            </>
+          ) : (
+            <>
+              {/* 🟢 Kanka: Burayı da aynı şekilde "ProfileSetup" yaptık */}
+              <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} /> 
+              <Stack.Screen name="Home" component={HomeScreen} />
+              <Stack.Screen name="Nfc" component={NfcScreen} />
+              <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+              <Stack.Screen name="ChatList" component={ChatList} />
+              <Stack.Screen name="ChatScreen" component={ChatScreen} />
+              <Stack.Screen name="UniversalLoginScreen" component={UniversalLoginScreen} />
+            </>
+          )
         ) : (
-          // === DIŞ KATMAN (GİRİŞ YAPILMADIYSA) ===
           <>
-            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="UniversalLoginScreen" component={UniversalLoginScreen} />
             <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
+            {/* 🟢 Kanka: Dış katmandaki ismi de eşitleyelim ki dışardan da patlamasın */}
+            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} /> 
           </>
         )}
-
-        {/* 🔥 KANKA: İŞTE GEÇİŞ ESNASINDA NAVIGATORÜN HER İKİ TARAFTA DA BULABİLMESİ İÇİN BURAYA ALDIK! */}
-        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-
       </Stack.Navigator>
     </NavigationContainer>
   );
-};
+}
 
 export default App;

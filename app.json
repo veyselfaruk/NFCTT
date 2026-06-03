@@ -29,6 +29,9 @@
         "ACCESS_FINE_LOCATION"
       ],
       "package": "com.anonymous.NFCTT"
-    }
+    },
+    "plugins": [
+      "react-native-nfc-manager"
+    ]
   }
 }

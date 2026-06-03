@@ -1,8 +1,8 @@
-import React, { useState } from 'react'; 
+import React, { useState, useEffect } from 'react'; 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { 
   View, Text, StyleSheet, TouchableOpacity, 
-  ScrollView, Platform 
+  ScrollView, BackHandler, ToastAndroid, Platform 
 } from 'react-native';
 
 // GÜNCEL SAF OLAN SAFEAREAVIEW VE KANKA BİZİM KORUMALI CONFIG BAĞLANTISI
@@ -17,6 +17,43 @@ import BottomBar from '../components/BottomBar';
 export default function HomeScreen({ navigation }: any) {
   // Canlı bildirim durumunu simüle eden state
   const [activeAlert, setActiveAlert] = useState<any>(null);
+
+  // =========================================================================
+  // ⚓ KANKA: ANASAYFADA İKİNCİ BASIŞTA UYGULAMADAN TEMİZCE ÇIKARTAN MOTOR
+  // =========================================================================
+  useEffect(() => {
+    let backPressCount = 0;
+
+    const backAction = () => {
+      // Eğer kullanıcı şu an aktif olarak Home ekranındaysa kilidi devreye sok
+      if (navigation.isFocused()) {
+        if (backPressCount === 0) {
+          backPressCount++;
+          
+          // Android cihazlarda ekrana kurumsal uyarımızı basıyoruz kanka
+          if (Platform.OS === 'android') {
+            ToastAndroid.show('Çıkmak için tekrar basın.', ToastAndroid.SHORT);
+          }
+          
+          // 2 saniye içinde ikinci kez basmazsa sayacı sıfırla ki kazara çıkmasın
+          const timeout = setTimeout(() => {
+            backPressCount = 0;
+          }, 2000);
+          
+          return true; // İlk basışta uygulamadan çıkışı bloke et, stack'i koru
+        } else {
+          BackHandler.exitApp(); // İkinci basışta sonsuz döngüyü kır ve temizce çık kanka!
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    
+    // Temizlik fonksiyonu: Event listener'ı uçur ki bellek sızıntısı (memory leak) yapmasın
+    return () => backHandler.remove();
+  }, [navigation]);
 
   // Güvenli çıkış fonksiyonu
   const handleLogout = async () => {
@@ -96,7 +133,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     alignItems: 'flex-start', 
     paddingHorizontal: 20, 
-    paddingTop: Platform.OS === 'android' ? 15 : 5,
+    paddingTop: Platform.OS === 'android' ? 20 : 5,
     width: '100%' 
   },
   mainContent: { flex: 1 },
