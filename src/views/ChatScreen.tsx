@@ -25,7 +25,7 @@ interface Message {
 }
 
 // =========================================================================
-// 🛡️ KAYDIRILABİLİR MESAJ SATIRI (SWIPEABLE MESSAGE BUBBLE MOTORU)
+// 🛡️ KAYDIRILABİLİR MESAJ SATIRI (SADECE BALON KAYAR - SIFIR SIZINTI MOTORU)
 // =========================================================================
 function SwipeableMessageRow({ 
   item, 
@@ -41,59 +41,69 @@ function SwipeableMessageRow({
   targetInitials: string; 
   onDelete: () => void; 
   renderMessageContent: () => React.ReactNode; 
-}) {
+ }) {
   const translateX = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        if (item.id === 'welcome_static') return false; // Sistem mesajı silinemez kanka
+        if (item.id === 'welcome_static') return false; // Sistem mesajı dokunulmaz kanka
         return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10;
       },
       onPanResponderMove: (_, gestureState) => {
-        // Benim mesajımsa sola, karşı tarafınsa sağa kaydırınca silme paneli çıksın
+        // Parmağına göre pürüzsüz kaydırma limiti (Maksimum 65px)
         if (isMyMessage && gestureState.dx < 0) {
-          translateX.setValue(Math.max(gestureState.dx, -70));
+          translateX.setValue(Math.max(gestureState.dx, -65));
         } else if (!isMyMessage && gestureState.dx > 0) {
-          translateX.setValue(Math.min(gestureState.dx, 70));
+          translateX.setValue(Math.min(gestureState.dx, 65));
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        const shouldDelete = isMyMessage ? gestureState.dx < -45 : gestureState.dx > 45;
-        if (shouldDelete) {
-          Animated.timing(translateX, {
-            toValue: isMyMessage ? -width : width,
-            duration: 180,
-            useNativeDriver: true,
-          }).start(() => onDelete());
-        } else {
-          Animated.spring(translateX, {
-            toValue: 0,
-            friction: 5,
-            useNativeDriver: true,
-          }).start();
-        }
+        const threshold = isMyMessage ? gestureState.dx < -40 : gestureState.dx > 40;
+        
+        // Önce balonu tatlı bir yayla yerine kapatıyoruz brom
+        Animated.spring(translateX, {
+          toValue: 0,
+          friction: 6,
+          useNativeDriver: true,
+        }).start(() => {
+          // Balon tamamen kapandıktan sonra temiz onay kutusunu fırlat
+          if (threshold) {
+            Alert.alert(
+              "Mesajı Kaldır",
+              "Bu mesajı sadece kendi ekranınızdan temizlemek istediğinize emin misiniz?",
+              [
+                { text: "Vazgeç", style: "cancel" },
+                { text: "Benim İçin Sil", style: "destructive", onPress: onDelete }
+              ]
+            );
+          }
+        });
       },
     })
   ).current;
 
+  // 👁️ KANKA: Kaydırma sıfırken opaklık KESİNLİKLE 0'dır, sızıntı imkansız!
+  const iconOpacity = translateX.interpolate({
+    inputRange: isMyMessage ? [-60, -15, 0] : [0, 15, 60],
+    outputRange: [1, 0.3, 0],
+    extrapolate: 'clamp',
+  });
+
   return (
     <View style={[styles.messageWrapper, isMyMessage ? styles.myMessageWrapper : styles.otherMessageWrapper]}>
-      {/* 🚨 ARKA PLAN: LOKAL SİLME TETİKLEYİCİ ALANI */}
-      <View style={[styles.localDeleteBg, isMyMessage ? styles.localDeleteBgRight : styles.localDeleteBgLeft]}>
-        <Ionicons name="trash" size={16} color="#fff" />
-      </View>
+      
+      {/* 🚨 SAF ARKA PLAN İKONU (Gelişmiş Z-Index Korumalı) */}
+      <Animated.View style={[
+        styles.pureDeleteIconContainer, 
+        isMyMessage ? { right: 25 } : { left: targetAvatar || !isMyMessage ? 60 : 25 },
+        { opacity: iconOpacity }
+      ]}>
+        <Ionicons name="trash-outline" size={20} color="#beaf9f" />
+      </Animated.View>
 
-      {/* 🔔 ÖN PLAN: PROFİL FOTOĞRAFI VE MESAJ BALONU KATMANI */}
-      <Animated.View 
-        style={[
-          styles.animatedMessageContainer, 
-          isMyMessage ? styles.myAnimatedRow : styles.otherAnimatedRow,
-          { transform: [{ translateX }] }
-        ]}
-        {...panResponder.panHandlers}
-      >
-        {/* 📸 GÜNCELLEME: Karşı tarafın mesajıysa soluna profil fotoğrafı önizlemesi çakıyoruz brom */}
+      {/* 🔔 ÖN PLAN YAPISI: BALON KATMANI ÜSTTE MÜHÜRLÜDÜR */}
+      <View style={styles.messageRowHorizontal}>
         {!isMyMessage && (
           <View style={styles.chatAvatarContainer}>
             {targetAvatar ? (
@@ -106,8 +116,15 @@ function SwipeableMessageRow({
           </View>
         )}
 
-        {renderMessageContent()}
-      </Animated.View>
+        {/* Sadece mesaj balonunu kaydıran z-index korumalı alan */}
+        <Animated.View 
+          style={[styles.mainBubbleAnimatedContent, { transform: [{ translateX }] }]}
+          {...panResponder.panHandlers}
+        >
+          {renderMessageContent()}
+        </Animated.View>
+      </View>
+
     </View>
   );
 }
@@ -125,17 +142,13 @@ export default function ChatScreen({ route, navigation }: any) {
   const [locationLoading, setLocationLoading] = useState(false);
   const [dynamicTitle, setDynamicTitle] = useState(title || 'Güvenli İletişim Kanalı');
   
-  // 📸 Profil fotoğrafı önizlemesi için eklediğimiz yeni stateler brom
   const [targetAvatar, setTargetAvatar] = useState<string | null>(null);
   const [targetInitials, setTargetInitials] = useState('👤');
-
-  // 🛡️ Sadece kendi ekranımızdan silinen mesajları tutan lokal maskeleme listesi
   const [deletedMessageIds, setDeletedMessageIds] = useState<string[]>([]);
   
   const flatListRef = useRef<FlatList>(null);
   const currentUser = auth.currentUser;
 
-  // === 📡 1. ADIM: DERİNLEMESİNE PROFIL FOTOĞRAFI VE ADI ÇÖZÜMLEYİCİ ===
   useEffect(() => {
     const fetchTargetProfile = async () => {
       if (!targetUid) return;
@@ -157,7 +170,6 @@ export default function ChatScreen({ route, navigation }: any) {
             setTargetInitials(computedName[0].toUpperCase());
           }
 
-          // 🌾 ChatList'teki o canavar derin tarama mekanizmasını buraya da enjekte ettik brom
           const resolvedAvatar = 
             actualData?.parent?.photoUrl || 
             actualData?.parent?.avatarUrl || 
@@ -177,7 +189,6 @@ export default function ChatScreen({ route, navigation }: any) {
     fetchTargetProfile();
   }, [targetUid]);
 
-  // === 📡 2. ADIM: REAL-TIME ANLIK MESAJ DİNLEME MOTORU ===
   useEffect(() => {
     if (!activeRoomId) return;
 
@@ -223,7 +234,6 @@ export default function ChatScreen({ route, navigation }: any) {
     return unsubscribe;
   }, [activeRoomId]);
 
-  // === 🚀 3. ADIM: KURUMSAM METİN MESAJI GÖNDERME MOTORU ===
   const handleSendMessage = async () => {
     if (inputText.trim() === '' || !currentUser) return;
     if (activeRoomId === 'system_welcome') { setInputText(''); return; }
@@ -249,7 +259,6 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
-  // === 📍 4. ADIM: ACİL DURUM CANLI KONUM ENJEKSİYONU ===
   const handleSendLocation = async () => {
     if (activeRoomId === 'system_welcome' || !currentUser) return;
 
@@ -285,13 +294,11 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
-  // 🛡️ LOKAL MASKELEMELİ SİLME AKSİYONU brom
   const handleLocalDeleteMessage = (messageId: string) => {
     setDeletedMessageIds(prev => [...prev, messageId]);
   };
 
   const renderMessageItem = ({ item }: { item: Message }) => {
-    // Eğer bu mesaj kullanıcı tarafından yerel olarak silindiyse ekrana basma brom
     if (deletedMessageIds.includes(item.id)) return null;
 
     const isMyMessage = item.senderId === currentUser?.uid;
@@ -381,7 +388,7 @@ export default function ChatScreen({ route, navigation }: any) {
         <View style={styles.rightPlaceholder} />
       </View>
 
-      {/* MESAJ ALANI VE KLAVYE INTEGRASYONU */}
+      {/* MESAJ ALANI */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={styles.contentFlex}
@@ -457,27 +464,49 @@ const styles = StyleSheet.create({
   rightPlaceholder: { width: 40 },
   
   messagesList: { padding: 15, paddingBottom: 20 },
-  messageWrapper: { position: 'relative', marginBottom: 14, width: '100%', minHeight: 40, justifyContent: 'center' },
+  messageWrapper: { position: 'relative', marginBottom: 12, width: '100%', justifyContent: 'center', backgroundColor: 'transparent' },
   myMessageWrapper: { alignItems: 'flex-end' },
   otherMessageWrapper: { alignItems: 'flex-start' },
 
-  // SWIPEABLE ANIMATION FRAMEWORK STYLES
-  animatedMessageContainer: { flexDirection: 'row', alignItems: 'flex-end', maxWidth: '85%', zIndex: 2 },
-  myAnimatedRow: { justifyContent: 'flex-end', width: '100%' },
-  otherAnimatedRow: { justifyContent: 'flex-start', width: '100%' },
+  messageRowHorizontal: { flexDirection: 'row', alignItems: 'flex-end', maxWidth: '85%', zIndex: 10 },
 
-  // MAT ANTRASİT LOKAL SİLME ARKA PLANI
-  localDeleteBg: { position: 'absolute', top: 0, bottom: 0, width: 70, backgroundColor: '#55555f', justifyContent: 'center', alignItems: 'center', zIndex: 1, borderRadius: 14 },
-  localDeleteBgRight: { right: 0 },
-  localDeleteBgLeft: { left: 0 },
+  // 🔥 1. SİHİRLİ DOKUNUŞ: Çöp kutusunun zIndex değerini en alta (1) çektik brom, sızıntı sıfır!
+  pureDeleteIconContainer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 30,
+    zIndex: 1
+  },
 
-  // CHAT İÇİ PREMİUM AVATAR SİSTEMİ brom
-  chatAvatarContainer: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#f2f2f7', marginRight: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 0.5, borderColor: '#e5e5ea' },
+  // 🔥 2. SİHİRLİ DOKUNUŞ: Balon hareket alanına zIndex: 10 mühürledik ki arkasını tamamen maskelesin!
+  mainBubbleAnimatedContent: {
+    zIndex: 10,
+    backgroundColor: 'transparent'
+  },
+
+  // SABİT PROFIL AVATARLARI
+  chatAvatarContainer: { 
+    width: 34, 
+    height: 34, 
+    borderRadius: 17, 
+    backgroundColor: '#f2f2f7', 
+    marginRight: 8, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    overflow: 'hidden', 
+    borderWidth: 0.5, 
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+    marginBottom: 2,
+    zIndex: 11
+  },
   chatAvatarImage: { width: 34, height: 34, borderRadius: 17 },
   chatAvatarPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   chatAvatarPlaceholderText: { fontSize: 13, fontWeight: '700', color: '#beaf9f' },
   
-  bubble: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20, maxWidth: '85%' },
+  bubble: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20 },
   myBubble: { backgroundColor: 'rgba(85, 85, 95, 0.88)', borderBottomRightRadius: 4 },
   otherBubble: { backgroundColor: 'rgba(242, 242, 247, 0.92)', borderBottomLeftRadius: 4, borderWidth: 0.5, borderColor: 'rgba(0, 0, 0, 0.04)' },
   
