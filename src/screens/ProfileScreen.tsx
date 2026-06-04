@@ -482,7 +482,7 @@ export default function ProfileScreen({ route, navigation }: any) {
       {/* === TOP HEADER BAR === */}
       <View style={styles.topNavigationHeader}>
         <Text style={styles.topNavigationTitle}>
-          {isFinderMode ? "🚨 ACİL DURUM GÜVENCE PANELİ" : "NFCTT Güvence Paneli"}
+          {isFinderMode ? "ACİL DURUM GÜVENCE PANELİ" : "NFCTT Güvence Paneli"}
         </Text>
         {/* 🛡️ Bulucu modunda sağdaki ayarlar/hamburger menüsünü gizliyoruz kanka */}
         {!isFinderMode && (
@@ -522,7 +522,7 @@ export default function ProfileScreen({ route, navigation }: any) {
           <View style={{ alignItems: 'center', marginTop: isAvatarExpanded ? 30 : 5 }}>
             <Text style={styles.userName}>{parent.name || 'İsim Soyisim'}</Text>
             <Text style={styles.userSubText}>
-              {isFinderMode ? "🚨 KORUMA ALTINDAKİ KULLANICI PROFİLİ" : "NFCTT Güvence Veli Profili"}
+              {isFinderMode ? "KULLANICI VELİ PROFİLİ" : "NFCTT Güvence Veli Profili"}
             </Text>
           </View>
         </View>
@@ -649,7 +649,7 @@ export default function ProfileScreen({ route, navigation }: any) {
         </View>
 
         {/* =========================================================================
-            💬 🔥 KANKA: SAHİBİYLE GÜVENLİ İLETİŞİME GEÇ BUTONU (YALNIZCA BULUCU MODUNDA)
+            💬 🔥 KANKA: SAHİBİYLE GÜVENLİ İLETİŞİME GEÇ BUTONU (DETERMİNİSTİK SABİT ODA)
             ========================================================================= */}
         {isFinderMode && (
           <TouchableOpacity style={styles.kurumsalChatButton} onPress={handleStartChat} activeOpacity={0.8}>
@@ -904,6 +904,6 @@ const styles = StyleSheet.create({
   dangerZoneCardFrame: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 59, 48, 0.15)', paddingHorizontal: 10, marginTop: 5, overflow: 'hidden' },
 
   // 🔥 🛡️ KANKA: SIFIR ENJEKSİYON KURUMSAL CHAT BUTONU STYLES
-  kurumsalChatButton: { flexDirection: 'row', backgroundColor: '#1c1c1e', height: 56, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 10, marginBottom: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  kurumsalChatButton: { flexDirection: 'row', backgroundColor: '#beaf9f', height: 56, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 10, marginBottom: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
   kurumsalChatButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginLeft: 10, letterSpacing: 0.5 }
 });
