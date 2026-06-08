@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebaseConfig';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
@@ -41,17 +41,16 @@ function SwipeableMessageRow({
   targetInitials: string; 
   onDelete: () => void; 
   renderMessageContent: () => React.ReactNode; 
- }) {
+}) {
   const translateX = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        if (item.id === 'welcome_static') return false; // Sistem mesajı dokunulmaz kanka
+        if (item.id === 'welcome_static' || item.id === 'system_broadcast') return false; // Kurumsal sistem duyuruları kaydırılamaz kanka
         return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10;
       },
       onPanResponderMove: (_, gestureState) => {
-        // Parmağına göre pürüzsüz kaydırma limiti (Maksimum 65px)
         if (isMyMessage && gestureState.dx < 0) {
           translateX.setValue(Math.max(gestureState.dx, -65));
         } else if (!isMyMessage && gestureState.dx > 0) {
@@ -61,13 +60,11 @@ function SwipeableMessageRow({
       onPanResponderRelease: (_, gestureState) => {
         const threshold = isMyMessage ? gestureState.dx < -40 : gestureState.dx > 40;
         
-        // Önce balonu tatlı bir yayla yerine kapatıyoruz brom
         Animated.spring(translateX, {
           toValue: 0,
           friction: 6,
           useNativeDriver: true,
         }).start(() => {
-          // Balon tamamen kapandıktan sonra temiz onay kutusunu fırlat
           if (threshold) {
             Alert.alert(
               "Mesajı Kaldır",
@@ -83,9 +80,8 @@ function SwipeableMessageRow({
     })
   ).current;
 
-  // 👁️ KANKA: Kaydırma sıfırken opaklık KESİNLİKLE 0'dır, sızıntı imkansız!
   const iconOpacity = translateX.interpolate({
-    inputRange: isMyMessage ? [-60, -15, 0] : [0, 15, 60],
+    inputRange: isMyMessage ? [-60, -15, 0] : [0, 15, 60], // Kelimeyi inputRange olarak düzelttik reis
     outputRange: [1, 0.3, 0],
     extrapolate: 'clamp',
   });
@@ -93,7 +89,6 @@ function SwipeableMessageRow({
   return (
     <View style={[styles.messageWrapper, isMyMessage ? styles.myMessageWrapper : styles.otherMessageWrapper]}>
       
-      {/* 🚨 SAF ARKA PLAN İKONU (Gelişmiş Z-Index Korumalı) */}
       <Animated.View style={[
         styles.pureDeleteIconContainer, 
         isMyMessage ? { right: 25 } : { left: targetAvatar || !isMyMessage ? 60 : 25 },
@@ -102,7 +97,6 @@ function SwipeableMessageRow({
         <Ionicons name="trash-outline" size={20} color="#beaf9f" />
       </Animated.View>
 
-      {/* 🔔 ÖN PLAN YAPISI: BALON KATMANI ÜSTTE MÜHÜRLÜDÜR */}
       <View style={styles.messageRowHorizontal}>
         {!isMyMessage && (
           <View style={styles.chatAvatarContainer}>
@@ -116,7 +110,6 @@ function SwipeableMessageRow({
           </View>
         )}
 
-        {/* Sadece mesaj balonunu kaydıran z-index korumalı alan */}
         <Animated.View 
           style={[styles.mainBubbleAnimatedContent, { transform: [{ translateX }] }]}
           {...panResponder.panHandlers}
@@ -124,7 +117,6 @@ function SwipeableMessageRow({
           {renderMessageContent()}
         </Animated.View>
       </View>
-
     </View>
   );
 }
@@ -151,14 +143,14 @@ export default function ChatScreen({ route, navigation }: any) {
 
   useEffect(() => {
     const fetchTargetProfile = async () => {
-      if (!targetUid) return;
+      if (!targetUid || targetUid === 'system') return;
       try {
         const profileSnap = await getDoc(doc(db, "profiles", targetUid));
         if (profileSnap.exists()) {
           const pData = profileSnap.data();
           const actualData = pData.finalData ? pData.finalData : pData;
           
-          const computedName = actualData?.dependent?.name || actualData?.parent?.name || "Kullanıcı";
+          const computedName = actualData?.parent?.name || actualData?.dependent?.name || "Kullanıcı";
           
           if (actualData?.dependent?.name) {
             setDynamicTitle(`${actualData.dependent.name} - Güvence Hattı`);
@@ -189,30 +181,18 @@ export default function ChatScreen({ route, navigation }: any) {
     fetchTargetProfile();
   }, [targetUid]);
 
+  // 📡 SİLME GEÇMİŞİNE GÖRE ANLIK FİLTRELENMİŞ MESAJ AKIŞI
   useEffect(() => {
-    if (!activeRoomId) return;
+    if (!activeRoomId || !currentUser) return;
 
-    const messagesQuery = query(
-      collection(db, "chat_rooms", activeRoomId, "messages"),
-      orderBy("timestamp", "asc")
-    );
-
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const fetchedMessages: Message[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        fetchedMessages.push({
-          id: docSnap.id,
-          senderId: data.senderId,
-          text: data.text || '',
-          timestamp: data.timestamp,
-          type: data.type || 'text',
-          latitude: data.latitude,
-          longitude: data.longitude
-        });
-      });
-
-      if (fetchedMessages.length === 0 && activeRoomId === 'system_welcome') {
+    // Eğer oda sistem bildirim odası ise, alt koleksiyon yerine direkt broadcast dökümanını dinliyoruz reis kalkanı mühürledik!
+    if (activeRoomId === 'system_welcome') {
+      const systemBroadcastRef = doc(db, "system_notifications", "broadcast");
+      
+      const unsubscribeSystem = onSnapshot(systemBroadcastRef, (docSnap) => {
+        const fetchedMessages: Message[] = [];
+        
+        // İlk karşılama statik mesajı kurumsal nizamda ekleniyor
         fetchedMessages.push({
           id: 'welcome_static',
           senderId: 'system',
@@ -220,12 +200,78 @@ export default function ChatScreen({ route, navigation }: any) {
           timestamp: new Date(),
           type: 'text'
         });
+
+        // 📢 BREVO SENKRONİZASYONLU DİNAMİK DUYURU BALONU MOTORU
+        if (docSnap.exists()) {
+          const sysData = docSnap.data();
+          if (sysData.lastMessage) {
+            fetchedMessages.push({
+              id: 'system_broadcast',
+              senderId: 'system',
+              text: sysData.lastMessage,
+              timestamp: sysData.updatedAt || new Date(),
+              type: 'text'
+            });
+          }
+        }
+
+        setMessages(fetchedMessages);
+        setLoading(false);
+        setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 120);
+      });
+
+      return unsubscribeSystem;
+    }
+
+    // 📡 DURUM B: Normal Kullanıcılar Arası Mesajlaşma Akışı
+    const messagesQuery = query(
+      collection(db, "chat_rooms", activeRoomId, "messages"),
+      orderBy("timestamp", "asc")
+    );
+
+    const roomRef = doc(db, "chat_rooms", activeRoomId);
+
+    const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
+      try {
+        const roomSnap = await getDoc(roomRef);
+        let clearTimestamp: any = null;
+        
+        if (roomSnap.exists()) {
+          const roomData = roomSnap.data();
+          if (roomData.clearedAt && roomData.clearedAt[currentUser.uid]) {
+            clearTimestamp = roomData.clearedAt[currentUser.uid];
+          }
+        }
+
+        const fetchedMessages: Message[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const msgTimestamp = data.timestamp;
+
+          if (clearTimestamp && msgTimestamp) {
+            const clearTime = clearTimestamp.toDate ? clearTimestamp.toDate().getTime() : new Date(clearTimestamp).getTime();
+            const msgTime = msgTimestamp.toDate ? msgTimestamp.toDate().getTime() : new Date(msgTimestamp).getTime();
+            if (msgTime <= clearTime) return; 
+          }
+
+          fetchedMessages.push({
+            id: docSnap.id,
+            senderId: data.senderId,
+            text: data.text || '',
+            timestamp: msgTimestamp,
+            type: data.type || 'text',
+            latitude: data.latitude,
+            longitude: data.longitude
+          });
+        });
+
+        setMessages(fetchedMessages);
+        setLoading(false);
+        setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 120);
+      } catch (err) {
+        console.error("[Message Filter Engine Error] Filtreleme sırasında hata:", err);
+        setLoading(false);
       }
-
-      setMessages(fetchedMessages);
-      setLoading(false);
-
-      setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 120);
     }, (error) => {
       console.error("[Firestore Sync Error] Mesaj akışı dinlenirken hata oluştu:", error);
       setLoading(false);
@@ -234,8 +280,9 @@ export default function ChatScreen({ route, navigation }: any) {
     return unsubscribe;
   }, [activeRoomId]);
 
+  // === 🚀 KURUMSAL METİN MESAJI GÖNDERME MOTORU ===
   const handleSendMessage = async () => {
-    if (inputText.trim() === '' || !currentUser) return;
+    if (inputText.trim() === '' || !currentUser || !targetUid) return;
     if (activeRoomId === 'system_welcome') { setInputText(''); return; }
 
     const messageToSend = inputText.trim();
@@ -252,6 +299,7 @@ export default function ChatScreen({ route, navigation }: any) {
       await updateDoc(doc(db, "chat_rooms", activeRoomId), {
         lastMessage: messageToSend,
         updatedAt: serverTimestamp(),
+        visibleTo: arrayUnion(currentUser.uid, targetUid),
         [`unreadCount.${targetUid}`]: (messages.length + 1)
       });
     } catch (error) {
@@ -259,8 +307,9 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
+  // === 📍 ACİL DURUM CANLI KONUM ENJEKSİYONU ===
   const handleSendLocation = async () => {
-    if (activeRoomId === 'system_welcome' || !currentUser) return;
+    if (activeRoomId === 'system_welcome' || !currentUser || !targetUid) return;
 
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
@@ -284,12 +333,14 @@ export default function ChatScreen({ route, navigation }: any) {
 
       await updateDoc(doc(db, "chat_rooms", activeRoomId), {
         lastMessage: '📍 Güvenli konum paylaşıldı',
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        visibleTo: arrayUnion(currentUser.uid, targetUid)
       });
     } catch (error) {
       console.error("[GPS Subsystem Error] Lokasyon verisi fırlatılamadı:", error);
       Alert.alert('Bağlantı Hatası', 'GPS koordinatları çekilemedi, lütfen tekrar deneyiniz.');
     } finally {
+      setLoading(false);
       setLocationLoading(false);
     }
   };
@@ -382,13 +433,15 @@ export default function ChatScreen({ route, navigation }: any) {
           <Ionicons name="arrow-back" size={24} color="#1c1c1e" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{dynamicTitle}</Text>
-          <Text style={styles.headerSubtitle}>{activeRoomId === 'system_welcome' ? 'Sistem Bildirimleri' : 'Çevrimiçi'}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {activeRoomId === 'system_welcome' ? 'NFCTT Sistem Bildirimleri' : dynamicTitle}
+          </Text>
+          <Text style={styles.headerSubtitle}>{activeRoomId === 'system_welcome' ? 'Resmi Duyuru Kanalı' : 'Çevrimiçi'}</Text>
         </View>
         <View style={styles.rightPlaceholder} />
       </View>
 
-      {/* MESAJ ALANI */}
+      {/* MESAJ ALANI VE KLAVYE INTEGRASYONU */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={styles.contentFlex}
@@ -470,7 +523,6 @@ const styles = StyleSheet.create({
 
   messageRowHorizontal: { flexDirection: 'row', alignItems: 'flex-end', maxWidth: '85%', zIndex: 10 },
 
-  // 🔥 1. SİHİRLİ DOKUNUŞ: Çöp kutusunun zIndex değerini en alta (1) çektik brom, sızıntı sıfır!
   pureDeleteIconContainer: {
     position: 'absolute',
     top: 0,
@@ -481,13 +533,11 @@ const styles = StyleSheet.create({
     zIndex: 1
   },
 
-  // 🔥 2. SİHİRLİ DOKUNUŞ: Balon hareket alanına zIndex: 10 mühürledik ki arkasını tamamen maskelesin!
   mainBubbleAnimatedContent: {
     zIndex: 10,
     backgroundColor: 'transparent'
   },
 
-  // SABİT PROFIL AVATARLARI
   chatAvatarContainer: { 
     width: 34, 
     height: 34, 

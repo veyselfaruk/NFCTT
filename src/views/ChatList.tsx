@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Image, Platform, Animated, PanResponder, Dimensions, Alert 
 } from 'react-native';
 import { auth, db } from '../config/firebaseConfig';
-import { collection, query, where, doc, getDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, doc, getDoc, onSnapshot, updateDoc, arrayRemove, serverTimestamp } from 'firebase/firestore';
 import BottomBar from '../components/BottomBar';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -17,7 +17,7 @@ interface ChatSession {
   otherUserAvatar: string | null;
   lastMessage: string;
   timestamp: any;
-  isSystemMessage?: boolean;
+  isSystemMessage: boolean;
 }
 
 // =========================================================================
@@ -29,9 +29,7 @@ function SwipeableChatItem({ item, onDelete, onPress }: { item: ChatSession, onD
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        // 🛡️ EMNİYET KİLİDİ: Sistem mesaj odası ise kaydırma hareketini tamamen bloke et kanka
         if (item.isSystemMessage) return false;
-        // Sadece yatayda belirgin bir kaydırma varsa hareketi yakala
         return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10;
       },
       onPanResponderMove: (_, gestureState) => {
@@ -57,7 +55,6 @@ function SwipeableChatItem({ item, onDelete, onPress }: { item: ChatSession, onD
     })
   ).current;
 
-  // === 📅 KURUMSAL ZAMAN FORMATLAMA MOTORU ===
   const formatChatTime = (timestamp: any) => {
     if (!timestamp) return '';
     try {
@@ -70,7 +67,6 @@ function SwipeableChatItem({ item, onDelete, onPress }: { item: ChatSession, onD
 
   return (
     <View style={styles.rowContainer}>
-      {/* 🚨 ARKA PLAN: SİLME BUTONU KATMANI (Sadece normal sohbetlerde gözükür) */}
       {!item.isSystemMessage && (
         <View style={styles.deleteBackground}>
           <TouchableOpacity style={styles.deleteIconButton} onPress={onDelete}>
@@ -80,7 +76,6 @@ function SwipeableChatItem({ item, onDelete, onPress }: { item: ChatSession, onD
         </View>
       )}
 
-      {/* 🔔 ÖN PLAN: HAREKETLİ SOHBET SATIRI */}
       <Animated.View 
         style={[styles.chatRow, { transform: [{ translateX: item.isSystemMessage ? 0 : translateX }] }]} 
         {...panResponder.panHandlers}
@@ -90,7 +85,6 @@ function SwipeableChatItem({ item, onDelete, onPress }: { item: ChatSession, onD
           activeOpacity={1}
           onPress={onPress}
         >
-          {/* Profil Avatar Alanı */}
           <View style={[styles.avatarContainer, item.isSystemMessage && styles.systemAvatar]}>
             {item.isSystemMessage ? (
               <Ionicons name="shield-checkmark" size={22} color="#beaf9f" />
@@ -103,7 +97,6 @@ function SwipeableChatItem({ item, onDelete, onPress }: { item: ChatSession, onD
             )}
           </View>
 
-          {/* Mesaj İçerik Detayları */}
           <View style={styles.chatInfo}>
             <View style={styles.chatHeaderRow}>
               <Text style={styles.userName} numberOfLines={1}>{item.otherUserName}</Text>
@@ -130,85 +123,104 @@ export default function ChatList({ navigation }: any) {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
-    // 📡 KANKA: Kalıcı 'chat_rooms' koleksiyonunda kullanıcının dahil olduğu odaları dinliyoruz
+    // 📡 REÇETE A: Kullanıcının dahil olduğu tüm aktif ve görünür ikili sohbet odaları
     const chatsQuery = query(
       collection(db, "chat_rooms"),
-      where("participants", "array-contains", currentUser.uid)
+      where("visibleTo", "array-contains", currentUser.uid)
     );
 
-    const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
-      // 🎯 PROMISE.ALL İLE ATOMİK VERİ ÇÖZÜMLEME MOTORU
-      const chatPromises = snapshot.docs.map(async (docSnap) => {
-        const chatData = docSnap.data();
-        const participants = chatData.participants || [];
-        
-        const otherUserUid = participants.find((uid: string) => uid !== currentUser.uid) || 'system';
-        
-        let otherUserName = "Kullanıcı";
-        let otherUserAvatar: string | null = null;
-        let isSystem = docSnap.id === 'system_welcome';
-
-        if (isSystem) {
-          otherUserName = "NFCTT Sistem Merkezi";
-        } else if (otherUserUid !== 'system') {
-          try {
-            const profileRef = doc(db, "profiles", otherUserUid);
-            const profileSnap = await getDoc(profileRef);
-            
-            if (profileSnap.exists()) {
-              const pData = profileSnap.data();
-              const actualData = pData.finalData ? pData.finalData : pData;
-              
-              otherUserName = actualData?.dependent?.name || actualData?.parent?.name || "Kullanıcı";
-              
-              // 🔍 1. GÜNCELLEME: Ubeyde'nin profil resmini getiren o derin şema tarayıcı motoru mühürlendi kanka!
-              otherUserAvatar = 
-                actualData?.parent?.photoUrl || 
-                actualData?.parent?.avatarUrl || 
-                actualData?.avatarUrl || 
-                actualData?.photoUrl || 
-                pData?.parent?.photoUrl || 
-                pData?.avatarUrl || 
-                null;
-            }
-          } catch (err) {
-            console.error("[ChatList Engine] Profil verisi çözümlenirken hata oluştu:", err);
-          }
-        }
-
-        return {
-          id: docSnap.id,
-          targetUid: otherUserUid,
-          otherUserName,
-          otherUserAvatar,
-          lastMessage: chatData.lastMessage || "Güvenli sohbet kanalı.",
-          timestamp: chatData.updatedAt || null,
-          isSystemMessage: isSystem
-        };
-      });
-
+    // Canlı senkronizasyon motoru tetikleniyor reis
+    const unsubscribeChats = onSnapshot(chatsQuery, async (snapshot) => {
       try {
+        const chatPromises = snapshot.docs.map(async (docSnap) => {
+          const chatData = docSnap.data();
+          const participants = chatData.participants || [];
+          
+          // Karşı tarafın UID'sini çözümlüyoruz kanka
+          const otherUserUid = participants.find((uid: string) => uid !== currentUser.uid) || 'system';
+          
+          let otherUserName = "Kullanıcı";
+          let otherUserAvatar: string | null = null;
+
+          // 👥 GÜNCELLEME: Karşı taraf gerçek bir kullanıcıysa, ismini tüm ihtimalleri tarayarak çözüyoruz kanka
+          if (otherUserUid !== 'system') {
+            try {
+              const profileRef = doc(db, "profiles", otherUserUid);
+              const profileSnap = await getDoc(profileRef);
+              
+              if (profileSnap.exists()) {
+                const pData = profileSnap.data();
+                
+                // 🔍 AKILLI VERİ AYIKLAMA KATMANI (Her İhtimale Karşı Derin Tarama)
+                // Firestore dökümanının en üstünde name olabilir, parent/dependent içinde olabilir ya da finalData'da olabilir.
+                const nameFromTop = pData?.name;
+                const nameFromParent = pData?.parent?.name || pData?.dependent?.name;
+                const nameFromFinalData = pData?.finalData?.parent?.name || pData?.finalData?.dependent?.name || pData?.finalData?.name;
+                
+                // Bulduğumuz ilk dolu isim değerini kurumsal nizamda set ediyoruz reis
+                otherUserName = nameFromTop || nameFromParent || nameFromFinalData || "NFCTT Kullanıcısı";
+                
+                // Aynı derin taramayı avatar/fotoğraf için de yapıyoruz kanka
+                otherUserAvatar = 
+                  pData?.photoUrl || pData?.avatarUrl ||
+                  pData?.parent?.photoUrl || pData?.parent?.avatarUrl ||
+                  pData?.finalData?.parent?.photoUrl || pData?.finalData?.avatarUrl || 
+                  null;
+              }
+            } catch (err) {
+              console.error("[ChatList Engine] Profil verisi çözümlenirken hata oluştu:", err);
+            }
+          }
+
+          return {
+            id: docSnap.id,
+            targetUid: otherUserUid,
+            otherUserName,
+            otherUserAvatar,
+            lastMessage: chatData.lastMessage || "Güvenli sohbet kanalı.",
+            timestamp: chatData.updatedAt || null,
+            isSystemMessage: false
+          };
+        });
+
         const resolvedChats = await Promise.all(chatPromises);
 
-        // 🎯 2. GÜNCELLEME: Sistem bildirim odası artık başka odalar gelse bile ASLA yok olmayacak!
-        const hasSystemWelcome = resolvedChats.some(c => c.id === 'system_welcome');
+        // 📢 REÇETE B: Firestore üzerindeki "system_notifications/broadcast" dökümanını canlı dinliyoruz kanka!
+        // Sen Brevo'dan mailleri basınca, arka planda buradaki tek dökümanı güncelleyeceksin, zınk diye herkesin ekranına düşecek.
+        const systemNotifRef = doc(db, "system_notifications", "broadcast");
+        const systemSnap = await getDoc(systemNotifRef);
         
-        if (!hasSystemWelcome) {
-          resolvedChats.push({
+        let systemMessageItem: ChatSession = {
+          id: "system_welcome",
+          targetUid: "system",
+          otherUserName: "NFCTT Sistem Merkezi",
+          otherUserAvatar: null,
+          lastMessage: "Akıllı koruma etiket sisteminiz aktif duruma getirilmiştir.",
+          timestamp: new Date(),
+          isSystemMessage: true
+        };
+
+        if (systemSnap.exists()) {
+          const sysData = systemSnap.data();
+          systemMessageItem = {
             id: "system_welcome",
             targetUid: "system",
             otherUserName: "NFCTT Sistem Merkezi",
             otherUserAvatar: null,
-            lastMessage: "Akıllı koruma etiket sisteminiz aktif duruma getirilmiştir.",
-            timestamp: new Date(),
+            lastMessage: sysData.lastMessage || "Yeni bir kurumsal güncelleme yayınlandı.",
+            timestamp: sysData.updatedAt || new Date(),
             isSystemMessage: true
-          });
+          };
         }
 
-        // Kronolojik Sıralama (Sistem odasını her daim zirveye çiviliyoruz kanka)
+        // Sistem odasını listenin en başına enjekte ediyoruz reis
+        resolvedChats.push(systemMessageItem);
+
+        // Kronolojik sıralama motoru (Sistem odası her zaman en üstte sabit kalır kanka)
         resolvedChats.sort((a, b) => {
           if (a.id === 'system_welcome') return -1;
           if (b.id === 'system_welcome') return 1;
+          
           const timeA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime();
           const timeB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : new Date(b.timestamp).getTime();
           return timeB - timeA;
@@ -216,7 +228,7 @@ export default function ChatList({ navigation }: any) {
 
         setChats(resolvedChats);
       } catch (err) {
-        console.error("[ChatList Promise All Error]:", err);
+        console.error("[ChatList Main Process Error]:", err);
       } finally {
         setLoading(false);
       }
@@ -225,11 +237,11 @@ export default function ChatList({ navigation }: any) {
       setLoading(false);
     });
 
-    return unsubscribe;
+    return unsubscribeChats;
   }, []);
 
   // =========================================================================
-  // 🗑️ FIRESTORE KALICI ODA SİLME FONKSİYONU
+  // 🗑️ BİREYSEL ODA MASKELEME MOTORU (LOCAL REMOVE)
   // =========================================================================
   const handleDeleteChat = (roomId: string) => {
     if (roomId === 'system_welcome') {
@@ -237,9 +249,12 @@ export default function ChatList({ navigation }: any) {
       return;
     }
 
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
     Alert.alert(
       "Sohbeti Sil",
-      "Bu sohbet odasını ve tüm mesaj geçmişini kalıcı olarak silmek istediğinize emin misiniz?",
+      "Bu sohbeti listenizden kaldırmak istediğinize emin misiniz? (Karşı tarafın mesaj geçmişi etkilenmeyecektir)",
       [
         { text: "Vazgeç", style: "cancel" },
         {
@@ -248,11 +263,15 @@ export default function ChatList({ navigation }: any) {
           onPress: async () => {
             try {
               setLoading(true);
-              await deleteDoc(doc(db, "chat_rooms", roomId));
-              console.log(`[Chat Engine] Oda başarıyla veri tabanından silindi: ${roomId}`);
+              const chatRoomRef = doc(db, "chat_rooms", roomId);
+              await updateDoc(chatRoomRef, {
+                visibleTo: arrayRemove(currentUser.uid),
+                [`clearedAt.${currentUser.uid}`]: serverTimestamp()
+              });
+              console.log(`[Chat Engine] Oda başarıyla kullanıcının görünümünden maskelendi: ${roomId}`);
             } catch (err) {
-              console.error("[Delete Room Failure] Oda silinirken hata çıktı:", err);
-              Alert.alert("Sistem Hatası", "Sohbet odası buluttan temizlenirken bir kesinti oluştu.");
+              console.error("[Mask Room Failure] Oda maskelenirken hata çıktı:", err);
+              Alert.alert("Sistem Hatası", "Sohbet odası görünümden kaldırılırken bir kesinti oluştu.");
             } finally {
               setLoading(false);
             }
@@ -264,7 +283,6 @@ export default function ChatList({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      {/* Üst Header Katmanı */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Mesajlar</Text>
       </View>
@@ -314,7 +332,6 @@ const styles = StyleSheet.create({
   listContainer: { paddingBottom: 100 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // 🛡️ SWIPEABLE ROW DESIGN SYSTEM STYLES (SAMAN GRİSİ VE ANTRASİT UYUMU)
   rowContainer: { position: 'relative', width: '100%', backgroundColor: '#55555f' },
   deleteBackground: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 90, backgroundColor: '#55555f', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
   deleteIconButton: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },

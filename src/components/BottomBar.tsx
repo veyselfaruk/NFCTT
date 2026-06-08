@@ -8,19 +8,38 @@ interface BottomBarProps {
 }
 
 export default function BottomBar({ navigation, activeScreen }: BottomBarProps) {
-  // Tam senin istediğin gibi: Aktifken net siyah, pasifken soft gri kanka
   const activeColor = '#000000';
   const inactiveColor = '#8e8e93';
 
   // =========================================================================
-  // 🔥 KANKA: RAM'İ ŞİŞİRMEYEN VE GEZİNME ÇÖKMELERİNİ BİTİREN KURUMSAL MOTOR
+  // 🔥 KANKA: KİLİTLENMEYİ VE KAÇAK KOOPYALARI BİTİREN GÜVENLİ NAVİGASYON MOTORU
   // =========================================================================
   const handleTabPress = (targetRoute: string) => {
-    navigation.navigate({
-      name: targetRoute,
-      key: targetRoute, // 🎯 Ekranı RAM'de tekilleştirir, üst üste kopya açtırmaz!
-      merge: true,       // 🎯 Sayfa zaten geçmişte varsa state'ini koruyarak öne çeker.
-    });
+    // Eğer kullanıcı zaten gitmek istediği sayfadaysa boşuna tetikleme yapma kanka
+    if (
+      (targetRoute === 'ProfileSetup' && activeScreen === 'Settings') ||
+      (targetRoute === 'Home' && activeScreen === 'Home') ||
+      (targetRoute === 'Nfc' && activeScreen === 'NFC') ||
+      (targetRoute === 'ChatList' && activeScreen === 'Chat') ||
+      (targetRoute === 'ProfileScreen' && activeScreen === 'Profile')
+    ) {
+      return;
+    }
+
+    // Profil ve Ayarlar gibi ana kırılım sayfalarında stack'i temizleyerek gitmek 
+    // arkadaki kaçak tetikleyicilerin navigatörü kilitlemesini kökten engeller reis.
+    if (targetRoute === 'ProfileScreen' || targetRoute === 'Home') {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: targetRoute }],
+      });
+    } else {
+      navigation.navigate({
+        name: targetRoute,
+        key: targetRoute,
+        merge: true,
+      });
+    }
   };
 
   return (
@@ -28,7 +47,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 1. ANASAYFA */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Home' && handleTabPress('Home')}
+        onPress={() => handleTabPress('Home')}
       >
         <Ionicons 
           name={activeScreen === 'Home' ? "home" : "home-outline"} 
@@ -41,7 +60,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 2. AYARLAR */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Settings' && handleTabPress('ProfileSetup')}
+        onPress={() => handleTabPress('ProfileSetup')}
       >
         <Ionicons 
           name={activeScreen === 'Settings' ? "settings" : "settings-outline"} 
@@ -54,7 +73,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 3. NFC TARAT */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => navigation.navigate('Nfc')} // 🔥 Kanka sadece log basmıyor, artık direkt sayfaya şutluyor!
+        onPress={() => handleTabPress('Nfc')}
       >
         <Ionicons 
           name={activeScreen === 'NFC' ? "radio" : "radio-outline"} 
@@ -67,7 +86,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 4. MESAJLAR */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Chat' && handleTabPress('ChatList')}
+        onPress={() => handleTabPress('ChatList')}
       >
         <Ionicons 
           name={activeScreen === 'Chat' ? "chatbox-ellipses" : "chatbox-ellipses-outline"} 
@@ -80,7 +99,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 5. PROFİLİM */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => activeScreen !== 'Profile' && handleTabPress('ProfileScreen')}
+        onPress={() => handleTabPress('ProfileScreen')}
       >
         <Ionicons 
           name={activeScreen === 'Profile' ? "person" : "person-outline"} 

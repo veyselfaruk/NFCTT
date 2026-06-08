@@ -178,7 +178,7 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
             {/* Şifremi Unuttum Linki */}
             <TouchableOpacity 
               style={styles.forgotPasswordButton} 
-              onPress={handleForgotPassword}
+              onPress={() => navigation.navigate('ForgotPasswordScreen')}
               activeOpacity={0.7}
             >
               <Text style={styles.forgotPasswordText}>Şifremi Unuttum?</Text>

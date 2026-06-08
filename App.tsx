@@ -16,6 +16,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ChatList from './src/views/ChatList';
 import ChatScreen from './src/views/ChatScreen'; 
 import NfcScreen from './src/screens/NfcScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'; // 👑 Ekran importumuz yerinde kanka
 import { LogBox } from 'react-native';
 
 LogBox.ignoreLogs([
@@ -24,9 +25,6 @@ LogBox.ignoreLogs([
 
 const Stack = createStackNavigator();
 
-// =========================================================================
-// 🎯 YÖNTEM B: PERFORMANS VE RAM DOSTU SABİT BİLEŞEN TANIMLAMASI
-// =========================================================================
 const LoadingPlaceholder = () => (
   <View style={{ flex: 1, backgroundColor: '#f8f9fa' }} />
 );
@@ -58,7 +56,7 @@ const App = () => {
           setHasProfile(false);
         }
       } else {
-        setHasProfile(null); // Oturum kapalıysa nötrle kanka
+        setHasProfile(null);
       }
       
       setInitializing(false);
@@ -79,44 +77,45 @@ const App = () => {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
-          hasProfile === null ? (
-            <Stack.Screen name="LoadingPlaceholder" component={LoadingPlaceholder} />
-          ) : hasProfile ? (
-            <>
-              <Stack.Screen name="Home" component={HomeScreen} />
-              <Stack.Screen name="Nfc" component={NfcScreen} />
-              <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
-              <Stack.Screen name="ChatList" component={ChatList} />
-              <Stack.Screen name="ChatScreen" component={ChatScreen} />
-              {/* 🟢 Kanka: name alanını "ProfileSetup" olarak güncelledik */}
-              <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} /> 
-              <Stack.Screen name="UniversalLoginScreen" component={UniversalLoginScreen} />
-            </>
+    <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {user ? (
+            hasProfile === null ? (
+              <Stack.Screen name="LoadingPlaceholder" component={LoadingPlaceholder} />
+            ) : hasProfile ? (
+              // 👑 DURUM A: PROFİLİ OLAN KULLANICI
+              <>
+                <Stack.Screen name="Home" component={HomeScreen} />
+                <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+                <Stack.Screen name="Nfc" component={NfcScreen} />
+                <Stack.Screen name="ChatList" component={ChatList} />
+                <Stack.Screen name="ChatScreen" component={ChatScreen} />
+                <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+              </>
+            ) : (
+              // 🌾 DURUM B: YENİ KAYIT OLMUŞ / PROFİLİ OLMAYAN KULLANICI
+              <>
+                <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                <Stack.Screen name="Home" component={HomeScreen} />
+                <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+                <Stack.Screen name="Nfc" component={NfcScreen} />
+                <Stack.Screen name="ChatList" component={ChatList} />
+                <Stack.Screen name="ChatScreen" component={ChatScreen} />
+              </>
+            )
           ) : (
+            // 🔒 DURUM C: OTURUM KAPALIYKEN GÖRÜNECEK EKRANLAR
             <>
-              {/* 🟢 Kanka: Burayı da aynı şekilde "ProfileSetup" yaptık */}
-              <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} /> 
-              <Stack.Screen name="Home" component={HomeScreen} />
-              <Stack.Screen name="Nfc" component={NfcScreen} />
-              <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
-              <Stack.Screen name="ChatList" component={ChatList} />
-              <Stack.Screen name="ChatScreen" component={ChatScreen} />
               <Stack.Screen name="UniversalLoginScreen" component={UniversalLoginScreen} />
+              <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
+              {/* 🌾 KANKA: YENİ KURUMSAL ŞİFRE SIFIRLAMA EKRANINI BURAYA EKLEDİM */}
+              <Stack.Screen name="ForgotPasswordScreen" component={ForgotPasswordScreen} />
             </>
-          )
-        ) : (
-          <>
-            <Stack.Screen name="UniversalLoginScreen" component={UniversalLoginScreen} />
-            <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
-            {/* 🟢 Kanka: Dış katmandaki ismi de eşitleyelim ki dışardan da patlamasın */}
-            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} /> 
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+    </View>
   );
 }
 

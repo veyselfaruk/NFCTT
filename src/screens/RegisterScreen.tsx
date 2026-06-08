@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView, ImageBackground 
 } from 'react-native';
 import { signUp as mobileSignUp } from '../controllers/AuthController'; // Mustafa'nın mobil motoru
+import { sendEmailTemplateViaBrevo } from '../../utils/mailer'; // 🚀 KANKA: Brevo Şablon Motorunu Ekledik
 
 export default function RegisterScreen({ navigation }: any) {
   const [name, setName] = useState('');
@@ -40,6 +41,23 @@ export default function RegisterScreen({ navigation }: any) {
         if (result.user) {
           const { updateProfile } = require('firebase/auth');
           await updateProfile(result.user, { displayName: name.trim() });
+
+          // 🌾 KANKA: ADIM 1 - HOŞ GELDİN & SAMAN GRİSİ BUTONLU MAİL TETİKLEYİCİSİ
+          try {
+            console.log("[Kayıt Sistemi] Kimlik oluşturuldu, Brevo #1 numaralı şablon tetikleniyor...");
+            await sendEmailTemplateViaBrevo(
+              email.trim(), // Alıcı mail adresi
+              1,            // Brevo panelindeki saman grisi butonlu şablon ID'si
+              {
+                kullanici_adi: name.trim(), // Şablondaki {{params.kullanici_adi}}
+                user_uid: result.user.uid   // Şablondaki {{params.user_uid}}
+              }
+            );
+            console.log("[Kayıt Sistemi] Hoş geldin doğrulama maili kuyruğa başarıyla gönderildi.");
+          } catch (mailError) {
+            // Mail motorunun patlaması kullanıcının kaydını bloklamasın diye hata loglanır ama akış devam eder reis
+            console.error("[Kayıt Sistemi Hatası] Brevo mail tetiklemesi başarısız oldu:", mailError);
+          }
         }
 
         console.log("[Kayıt Sistemi] Kimlik başarıyla oluşturuldu. Profil kurulumuna yönlendiriliyor...");

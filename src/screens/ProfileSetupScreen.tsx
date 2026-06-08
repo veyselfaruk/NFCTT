@@ -23,7 +23,7 @@ import BottomBar from '../components/BottomBar';
 const ITEM_HEIGHT = 40; 
 
 // =========================================================================
-// 🔥 KANKA: SONSUZ DÖNGÜYÜ VE CRASH RİSKİNİ SIFIRLAYAN AKILLI WHEEL MOTORU
+// 🎯 TEKERLEK SEÇİCİ (SCROLL WHEEL PICKER) MOTORU - TASARIM VE İŞLEV KORUNDU
 // =========================================================================
 interface ScrollWheelPickerProps {
   data: string[];
@@ -144,7 +144,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   const [districtList, setDistrictList] = useState<string[]>([]);
   const [existingPhotoUrl, setExistingPhotoUrl] = useState('');
 
-  // --- BAĞIMLI STATE TANIMLARI ---
+  // --- BAĞIMLI (CANLI) STATE TANIMLARI ---
   const [dependentType, setDependentType] = useState(''); 
   const [dependentName, setDependentName] = useState('');
   const [dependentAge, setDependentAge] = useState(''); 
@@ -156,7 +156,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   const [dependentNote, setDependentNote] = useState('');
   const [dependentSubCategory, setDependentSubCategory] = useState('');
 
-  // 🎯 KANKA: Orijinal verileri tutan "Devlet Arşivi" referansımız
+  // Orijinal yedek referansı
   const dbBackupRef = useRef<any>(null);
 
   const getParentAgeItems = () => {
@@ -180,6 +180,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     return ['Seçiniz', ...items];
   };
 
+  // Veri Yükleme Motoru
   useEffect(() => {
     let isMounted = true;
     const loadProfileData = async () => {
@@ -214,7 +215,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
             const fDep = firestoreData?.dependent || {};
             const rDep = rawData?.dependent || {};
             
-            // 🔥 KANKA: İlk açılışta gelen tüm orijinal canlı paketini buraya mühürledik!
             dbBackupRef.current = { ...fDep };
             
             setDependentName(String(fDep.name || rDep.name || ''));
@@ -246,11 +246,10 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
           }
         }
       } catch (error) {
-        console.error("[Veri Hatası] Yeni kayıt setup kontrol sızıntısı engellendi:", error);
+        console.error("Profil datası yüklenirken hata:", error);
       } finally {
         if (isMounted) {
           setCheckingProfile(false);
-          setIsDataLoading(false);
         }
       }
     };
@@ -267,16 +266,12 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     }
   }, [parentCity]);
 
-  // =========================================================================
-  // 🔥 KANKA: TÜR DEĞİŞİNCE ARŞİV KONTROLÜ YAPIP AKILLI TEMİZLİK YAPAN MOTOR
-  // =========================================================================
   const handleCategorySelection = (selectedCategory: string) => {
     if (dependentType === selectedCategory) return;
 
     const backupDep = dbBackupRef.current || {};
     let originalCategory = backupDep.category || backupDep.type || '';
     
-    // Eğer veritabanındaki tür kedi/köpek gibi bir şeyse onu 'Evcil Hayvan' şemsiyesine çekiyoruz kanka
     if (originalCategory && originalCategory !== 'Çocuk' && originalCategory !== 'Yaşlı') {
       originalCategory = 'Evcil Hayvan';
     }
@@ -284,9 +279,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     setOpenPickerId(null);
 
     if (selectedCategory === originalCategory) {
-      // 🎯 BİNGO: Kullanıcı veritabanındaki orijinal türüne geri döndü! Arşivi boşaltıyoruz kanka:
-      console.log('[Sistem] Kullanıcı orijinal türüne döndü, arşiv verileri geri yükleniyor...');
-      
       setDependentType(selectedCategory);
       setDependentName(String(backupDep.name || ''));
       setDependentChipNumber(String(backupDep.chipNumber || ''));
@@ -316,8 +308,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
         setDependentAge('');
       }
     } else {
-      // 🧹 AKILLI TEMİZLİKÇİ: Farklı bir tür seçildi, ortak inputlar dahil her yeri sıfırla kanka!
-      console.log('[Sistem] Farklı bir tür seçildi, form sıfırlanıyor...');
       setDependentType(selectedCategory);
       setDependentSubCategory('');
       setDependentName('');
@@ -331,14 +321,17 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     }
   };
 
+  // =========================================================================
+  // 🚀 SENARYOMUZUN KALBİ: KAYDEDİP DİREKT PROFILESCREEN'E ATAN FONKSİYON
+  // =========================================================================
   const handleSaveAll = async () => {
     if (!parentName.trim() || !parentPhone.trim() || !parentCity || !parentDistrict || !parentAddress.trim()) {
-      Alert.alert('Eksik Veli Bilgisi', 'Lütfen veli kısmındaki zorunlu (*) alanları doldurun.');
+      Alert.alert('Eksik Veli Bilgisi', 'Lütfen veli kısmındaki zorunlu (*) alanları doldurun kanka.');
       setActiveTab('parent');
       return;
     }
     if (!dependentType || !dependentName.trim()) {
-      Alert.alert('Eksik Canlı Bilgisi', 'Lütfen canlı profil türünü ve ismini doldurun kanka.');
+      Alert.alert('Eksik Canlı Bilgisi', 'Lütfen canlı profil türünü ve ismini doldurun reis.');
       setActiveTab('dependent');
       return;
     }
@@ -377,11 +370,16 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
     try {
       await saveProfileToFirebase(finalData); 
-      Alert.alert('Başarılı', 'Profil kurulumu başarıyla tamamlandı reis.');
-      navigation.reset({ index: 0, routes: [{ name: 'ProfileScreen' }] });
+      Alert.alert('Başarılı', 'Profil kurulumu tamamlandı, profilinize yönlendiriliyorsunuz.');
+      
+      // 🎯 SENARYO GEREĞİ: Reset atarak doğrudan ProfileScreen sayfasına uçuyoruz kanka!
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'ProfileScreen' }],
+      });
     } catch (error) {
-      console.error("[Firestore Hatası] Yazma hatası:", error);
-      navigation.reset({ index: 1, routes: [{ name: 'Home' }, { name: 'ProfileScreen' }] });
+      console.error("Kaydedilirken hata oluştu:", error);
+      Alert.alert("Hata", "Profil kaydedilemedi, tekrar dene reis.");
     } finally {
       setIsDataLoading(false);
     }
@@ -401,12 +399,13 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
         
         <View style={styles.header}>
           <Text style={styles.headerTitle}>NFCTT Profil Kurulumu</Text>
         </View>
 
+        {/* SEKME/TAB YAPISI */}
         <View style={styles.tabContainer}>
           <TouchableOpacity style={[styles.tabButton, activeTab === 'parent' && styles.tabButtonActive]} onPress={() => setActiveTab('parent')}>
             <Text style={[styles.tabButtonText, activeTab === 'parent' && styles.tabButtonTextActive]}>1. Veli Bilgileri</Text>
@@ -416,11 +415,13 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
 
+        {/* VELİ SEKMESİ İÇERİĞİ */}
         {activeTab === 'parent' && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>1. Hesap Sahibi (Veli) Bilgileri</Text>
+            
             <Text style={styles.inputLabel}>İsim Soyisim *</Text>
-            <TextInput placeholder="John Doe *" placeholderTextColor="#8e8e93" style={styles.input} onChangeText={setParentName} value={parentName} />
+            <TextInput placeholder="İsim Soyisim *" placeholderTextColor="#8e8e93" style={styles.input} onChangeText={setParentName} value={parentName} />
             
             <Text style={styles.inputLabel}>Cinsiyet</Text>
             <TouchableOpacity style={styles.customPickerBox} onPress={() => togglePicker('p-gender')}>
@@ -489,28 +490,33 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
             <Text style={styles.inputLabel}>Detaylı Adres Tarifi *</Text>
             <TextInput placeholder="Adres tarifi..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 80 }]} multiline onChangeText={setParentAddress} value={parentAddress} />
+            
+            <Text style={styles.inputLabel}>Veli Notu</Text>
+            <TextInput placeholder="Eklemek istediğiniz not..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 60 }]} multiline onChangeText={setParentNote} value={parentNote} />
           </View>
         )}
 
+        {/* CANLI SEKMESİ İÇERİĞİ */}
         {activeTab === 'dependent' && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>2. Koruma Altındaki Canlı (Kayıp Türü)</Text>
+            <Text style={styles.sectionTitle}>2. Koruma Altındaki Canlı Bilgileri</Text>
+            
             <Text style={styles.label}>Kayıp Profil Türünü Seçin:</Text>
             <View style={styles.typeButtonContainer}>
               {['Çocuk', 'Evcil Hayvan', 'Yaşlı'].map((type) => (
                 <TouchableOpacity 
                   key={type}
                   style={[styles.typeButton, (dependentType === type || (type === 'Evcil Hayvan' && ['Kedi', 'Köpek', 'Kuş', 'Kemirgen', 'Sürüngen/Akvaryum', 'Diğer'].includes(dependentType))) && styles.typeButtonSelected]}
-                  onPress={() => handleCategorySelection(type)} // 🔥 Kanka akıllı fonksiyonu buraya bağladık
+                  onPress={() => handleCategorySelection(type)}
                 >
-                  <Text style={[styles.typeButtonText, (dependentType === type || (type === 'Evcil Hayvan' && ['Kedi', 'Köpek', 'Kuş', 'Kemirgen', 'Sürüngen/Akvaryum', 'Diğer'].includes(dependentType))) && styles.typeButtonTextSelected]}>{type}</Text>
+                  <Text style={[styles.typeButtonText, (dependentType === type || (type === 'Evcil Hayvan' && ['Kedi', 'Köpek', 'Kuş', 'Kemirgen', 'Sürüngen/Akvaryum', 'Diğer'].includes(dependentType))) && styles.typeButtonTextSelected]} >{type}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             {dependentType !== '' && (
               <View style={{ marginTop: 10 }}>
-                <Text style={styles.subLabel}>{dependentType} Detaylı Bilgileri</Text>
+                <Text style={styles.subLabel}>{dependentType} Detayları</Text>
                 
                 <Text style={styles.inputLabel}>{dependentType === 'Evcil Hayvan' ? "Evcil Hayvanın Adı *" : "İsim Soyisim *"}</Text>
                 <TextInput placeholder="İsim giriniz *" placeholderTextColor="#8e8e93" style={styles.input} onChangeText={setDependentName} value={dependentName} />
@@ -609,11 +615,16 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                 )}
 
                 <Text style={styles.inputLabel}>Ek Not</Text>
-                <TextInput placeholder="Kritik notlar..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 70 }]} multiline onChangeText={setDependentNote} value={dependentNote} />
+                <TextInput placeholder="Kritik sağlık veya davranış notları..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 70 }]} multiline onChangeText={setDependentNote} value={dependentNote} />
 
-                <View style={{ marginTop: 20 }}>
+                {/* 👑 BİZİ PROFILESCREEN'E UÇURACAK ASIL BUTON */}
+                <View style={{ marginTop: 25 }}>
                   <TouchableOpacity disabled={isDataLoading} style={styles.primaryButton} onPress={handleSaveAll}>
-                    {isDataLoading ? <ActivityIndicator size="small" color="#2b231a" /> : <Text style={styles.buttonText}>Kurulumu Tamamla ve Kaydet</Text>}
+                    {isDataLoading ? (
+                      <ActivityIndicator size="small" color="#2b231a" />
+                    ) : (
+                      <Text style={styles.buttonText}>Kurulumu Tamamla ve Kaydet</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -621,6 +632,8 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
           </View>
         )}
       </ScrollView>
+      
+      {/* 👑 NAVİGASYON BARI SAPASAĞLAM VE ORİJİNAL YERİNDE REİS */}
       <BottomBar navigation={navigation} activeScreen="Settings" />
     </View>
   );
