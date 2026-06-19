@@ -180,7 +180,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     return ['Seçiniz', ...items];
   };
 
-  // Veri Yükleme Motoru
+  // Veri Yükleme Motoru - KORUMALI NİZAM
   useEffect(() => {
     let isMounted = true;
     const loadProfileData = async () => {
@@ -237,9 +237,14 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
               setDependentType(currentType);
               setDependentSubCategory('');
             }
-            const rawAge = fDep.age || rDep.age || '';
-            if (rawAge) {
+            
+            const rawAge = fDep?.age || rDep?.age || '';
+            if (rawAge && typeof rawAge === 'string') {
               setDependentAge(String(rawAge).replace(/yaş/i, '').trim());
+            } else if (rawAge) {
+              setDependentAge(String(rawAge));
+            } else {
+              setDependentAge('');
             }
           } else {
             if (incomingName) setParentName(incomingName);
@@ -257,11 +262,26 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     return () => { isMounted = false; };
   }, [incomingName]);
 
+  // 🔥 CRASH ÖNLEYİCİ MÜHÜRLÜ TURKEY-NEIGHBOURHOODS MOTORU
   useEffect(() => {
-    if (parentCity) {
-      const districts = citiesAndDistricts.getDistrictsByCityCode(parentCity) || [];
-      setDistrictList(districts);
-    } else {
+    if (!parentCity || parentCity.trim() === '' || parentCity === 'Şehir Seçiniz') {
+      setDistrictList([]);
+      return;
+    }
+
+    try {
+      if (citiesAndDistricts && typeof citiesAndDistricts.getDistrictsByCityCode === 'function') {
+        const districts = citiesAndDistricts.getDistrictsByCityCode(parentCity);
+        if (districts && Array.isArray(districts)) {
+          setDistrictList(districts);
+        } else {
+          setDistrictList([]);
+        }
+      } else {
+        setDistrictList([]);
+      }
+    } catch (err) {
+      console.warn("İlçe kütüphanesi sarsıldı ama çökme engellendi reis:", err);
       setDistrictList([]);
     }
   }, [parentCity]);
@@ -302,8 +322,10 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
       }
 
       const rawAge = backupDep.age || '';
-      if (rawAge) {
+      if (rawAge && typeof rawAge === 'string') {
         setDependentAge(String(rawAge).replace(/yaş/i, '').trim());
+      } else if (rawAge) {
+        setDependentAge(String(rawAge));
       } else {
         setDependentAge('');
       }
@@ -321,9 +343,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     }
   };
 
-  // =========================================================================
-  // 🚀 SENARYOMUZUN KALBİ: KAYDEDİP DİREKT PROFILESCREEN'E ATAN FONKSİYON
-  // =========================================================================
   const handleSaveAll = async () => {
     if (!parentName.trim() || !parentPhone.trim() || !parentCity || !parentDistrict || !parentAddress.trim()) {
       Alert.alert('Eksik Veli Bilgisi', 'Lütfen veli kısmındaki zorunlu (*) alanları doldurun kanka.');
@@ -372,7 +391,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
       await saveProfileToFirebase(finalData); 
       Alert.alert('Başarılı', 'Profil kurulumu tamamlandı, profilinize yönlendiriliyorsunuz.');
       
-      // 🎯 SENARYO GEREĞİ: Reset atarak doğrudan ProfileScreen sayfasına uçuyoruz kanka!
       navigation.reset({
         index: 0,
         routes: [{ name: 'ProfileScreen' }],
@@ -617,7 +635,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                 <Text style={styles.inputLabel}>Ek Not</Text>
                 <TextInput placeholder="Kritik sağlık veya davranış notları..." placeholderTextColor="#8e8e93" style={[styles.input, { height: 70 }]} multiline onChangeText={setDependentNote} value={dependentNote} />
 
-                {/* 👑 BİZİ PROFILESCREEN'E UÇURACAK ASIL BUTON */}
                 <View style={{ marginTop: 25 }}>
                   <TouchableOpacity disabled={isDataLoading} style={styles.primaryButton} onPress={handleSaveAll}>
                     {isDataLoading ? (
@@ -633,7 +650,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
         )}
       </ScrollView>
       
-      {/* 👑 NAVİGASYON BARI SAPASAĞLAM VE ORİJİNAL YERİNDE REİS */}
       <BottomBar navigation={navigation} activeScreen="Settings" />
     </View>
   );

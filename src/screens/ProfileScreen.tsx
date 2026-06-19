@@ -367,7 +367,6 @@ export default function ProfileScreen({ route, navigation }: any) {
     ]);
   };
 
-  // 🔐 👑 GÜNCELLEME: MILIMETRIK KURUMSAL UYARI VE HATA YÖNETIMI MİMARİSİ
   const handleLivePasswordChange = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert("Eksik Alan", "Lütfen şifre alanlarının tümünü doldurunuz.");
@@ -395,7 +394,6 @@ export default function ProfileScreen({ route, navigation }: any) {
         setNewPassword('');
         setConfirmPassword('');
       } else {
-        // 🛡️ KANKA: Backend servisinden dönen friendly hatayı tam olarak burada yakalıyoruz
         Alert.alert("Hata", result.error || "Şifre değiştirme işlemi gerçekleştirilemedi.");
       }
     } catch (error) {
@@ -409,6 +407,7 @@ export default function ProfileScreen({ route, navigation }: any) {
     Alert.alert("E-posta Güncelleme", "Güvenlik protokolleri gereği e-posta adresi değişikliği için mevcut şifrenizle doğrulama adımları tetiklenecektir. Yakında aktif.");
   };
 
+  // 🔥 👑 MÜHÜRLÜ RESET PARADOKSU DÜZELTİLMİŞ HESAP SİLME MOTORU
   const handleDeleteAccount = () => {
     Alert.alert(
       "⚠️ HESABI KALICI OLARAK SİL",
@@ -428,11 +427,8 @@ export default function ProfileScreen({ route, navigation }: any) {
                 await deleteDoc(profileRef);
                 console.log("[Firestore] Profil verileri başarıyla yok edildi.");
 
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'UniversalLoginScreen' }],
-                });
-
+                // 🎯 KANKA: onAuthStateChanged zaten tetikleneceği için el yordamıyla reset atmayı kaldırıp, 
+                // navigasyon çakışmasını kökten temizledik. Doğrudan Auth silmeye geçiyoruz reis.
                 await user.delete();
                 Alert.alert("Başarılı", "Hesabınız ve tüm kurumsal verileriniz sistemimizden kalıcı olarak kazınmıştır.");
               }
@@ -809,7 +805,7 @@ export default function ProfileScreen({ route, navigation }: any) {
               {isFaqVisible && (
                 <View style={styles.drawerDropdownContent}>
                   <Text style={styles.faqQ}>• NFCTT UID çipi nasıl çalışır?</Text>
-                  <Text style={styles.faqA}>NFC çipi, canlının benzersiz Firestore UID profil linkini taşır. Herhangi bir telephone yaklaştırıldığında güvenli profil sayfası otomatik açılır.</Text>
+                  <Text style={styles.faqA}>NFC çipi, canlının benzersiz Firestore UID profil linkini taşır. Herhangi bir telefona yaklaştırıldığında güvenli profil sayfası otomatik açılır.</Text>
                   <Text style={styles.faqQ}>• Konum bilgisi anlık alınır mı?</Text>
                   <Text style={styles.faqA}>Çip tarandığı an veliye tarama koordinatları ve anlık bildirim akışı iletilir.</Text>
                 </View>
