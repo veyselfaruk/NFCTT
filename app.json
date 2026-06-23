@@ -25,13 +25,18 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "NFC",
+        "android.permission.NFC"
       ],
-      "package": "com.anonymous.NFCTT"
+      "package": "com.veyselfaruk.nfctt"
     },
     "plugins": [
       "react-native-nfc-manager"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "db04c247-0261-4fec-9c8c-c6260f228552"
+      }
+    }
   }
 }

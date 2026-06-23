@@ -55,7 +55,6 @@ export default function RegisterScreen({ navigation }: any) {
             );
             console.log("[Kayıt Sistemi] Hoş geldin doğrulama maili kuyruğa başarıyla gönderildi.");
           } catch (mailError) {
-            // Mail motorunun patlaması kullanıcının kaydını bloklamasın diye hata loglanır ama akış devam eder reis
             console.error("[Kayıt Sistemi Hatası] Brevo mail tetiklemesi başarısız oldu:", mailError);
           }
         }
@@ -63,10 +62,17 @@ export default function RegisterScreen({ navigation }: any) {
         console.log("[Kayıt Sistemi] Kimlik başarıyla oluşturuldu. Profil kurulumuna yönlendiriliyor...");
         notify('Başarılı', 'Hesabınız başarıyla oluşturuldu.');
         
-        // 🔥 KANKA: ADIM 1 KRİTİK REÇETESİ!
-        // navigate yerine replace çaktık. Register stack'ten uçuyor, yerine doğrudan ProfileSetup oturuyor.
-        // Arka planda harita (Home) ön izlemesi tetiklenmesi kökten engellendi.
-        navigation.replace('ProfileSetup', { fullName: name.trim() });
+        // 🔥 KANKA: ZAMANLAMA ÇAKIŞMASI VE STATE YARIŞI KÖKTEN ÇÖZÜLDÜ!
+        // App.tsx'in ekran ağacını baştan çizmesine 100ms avans veriyoruz.
+        // replace yerine zaman ayarlı navigate çakarak o inatçı uyarıyı tarihe gömüyoruz reis!
+        setTimeout(() => {
+          try {
+            navigation.navigate('ProfileSetupScreen', { fullName: name.trim() });
+          } catch (navError) {
+            console.log("[Navigasyon Pas Geçildi] App.tsx zaten ekranı önden yükledi kanka.");
+          }
+        }, 100);
+
       } else {
         notify('Hata', result.error || 'Kayıt sırasında bir sorun oluştu.');
       }

@@ -12,12 +12,13 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
   const inactiveColor = '#8e8e93';
 
   // =========================================================================
-  // 🔥 KANKA: KİLİTLENMEYİ VE KAÇAK KOOPYALARI BİTİREN GÜVENLİ NAVİGASYON MOTORU
+  // 🔥 KANKA: KİLİTLENMEYİ VE KAÇAK KOPYALARI BİTİREN GÜVENLİ NAVİGASYON MOTORU
   // =========================================================================
   const handleTabPress = (targetRoute: string) => {
+    // 👑 GÜNCELLEME: İsim uyuşmazlığı ProfileSetup -> ProfileSetupScreen olarak mühürlendi!
     // Eğer kullanıcı zaten gitmek istediği sayfadaysa boşuna tetikleme yapma kanka
     if (
-      (targetRoute === 'ProfileSetup' && activeScreen === 'Settings') ||
+      (targetRoute === 'ProfileSetupScreen' && activeScreen === 'Settings') ||
       (targetRoute === 'Home' && activeScreen === 'Home') ||
       (targetRoute === 'Nfc' && activeScreen === 'NFC') ||
       (targetRoute === 'ChatList' && activeScreen === 'Chat') ||
@@ -60,7 +61,7 @@ export default function BottomBar({ navigation, activeScreen }: BottomBarProps) 
       {/* 2. AYARLAR */}
       <TouchableOpacity 
         style={styles.barItem} 
-        onPress={() => handleTabPress('ProfileSetup')}
+        onPress={() => handleTabPress('ProfileSetupScreen')}
       >
         <Ionicons 
           name={activeScreen === 'Settings' ? "settings" : "settings-outline"} 

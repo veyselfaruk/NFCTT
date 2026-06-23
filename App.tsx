@@ -91,12 +91,14 @@ const App = () => {
                 <Stack.Screen name="Nfc" component={NfcScreen} />
                 <Stack.Screen name="ChatList" component={ChatList} />
                 <Stack.Screen name="ChatScreen" component={ChatScreen} />
-                <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                {/* 👑 GÜNCELLEME: İsim senkronizasyonu tamamlandı */}
+                <Stack.Screen name="ProfileSetupScreen" component={ProfileSetupScreen} />
               </>
             ) : (
               // 🌾 DURUM B: YENİ KAYIT OLMUŞ / PROFİLİ OLMAYAN KULLANICI
               <>
-                <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                {/* 👑 GÜNCELLEME: İsim senkronizasyonu tamamlandı. RegisterScreen artık burayı zınk diye tetikleyecek! */}
+                <Stack.Screen name="ProfileSetupScreen" component={ProfileSetupScreen} />
                 <Stack.Screen name="Home" component={HomeScreen} />
                 <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
                 <Stack.Screen name="Nfc" component={NfcScreen} />

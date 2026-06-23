@@ -105,14 +105,16 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
               if (onLoginSuccess) onLoginSuccess(loggedInUser);
               
               setLoading(false);
-              navigation.replace('ProfileSetup', { fullName: loggedInUser.displayName });
+              // 👑 GÜNCELLEME: ProfileSetup -> ProfileSetupScreen olarak mühürlendi!
+              navigation.replace('ProfileSetupScreen', { fullName: loggedInUser.displayName });
               return;
             }
           } catch (dbErr) {
             console.error("Firestore profil sorgulama hatası:", dbErr);
             if (onLoginSuccess) onLoginSuccess(loggedInUser);
             setLoading(false);
-            navigation.replace('ProfileSetup', { fullName: loggedInUser.displayName });
+            // 👑 GÜNCELLEME: ProfileSetup -> ProfileSetupScreen olarak mühürlendi!
+            navigation.replace('ProfileSetupScreen', { fullName: loggedInUser.displayName });
             return;
           }
         }
