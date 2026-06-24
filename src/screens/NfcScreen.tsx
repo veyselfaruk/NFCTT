@@ -10,17 +10,13 @@ import BottomBar from '../components/BottomBar';
 export default function NfcScreen({ navigation }: any) {
   const [isScanning, setIsScanning] = useState(false);
   const [loading, setLoading] = useState(false);
-  
-  // 🔐 DEVELOPER SIMULATION CONTROLLER STATE
   const [testUid, setTestUid] = useState('');
 
   useEffect(() => {
-    // 🔌 Hardware Initialization: Subsystem connection protocol
     NfcManager.start().catch((err) => {
       console.log("[NFC Subsystem] Native core driver bypassed (Development Environment Mode).");
     });
 
-    // 🎯 HARDWARE BACK BUTTON NAVIGATION SAFE GUARD
     const backAction = () => {
       if (navigation.isFocused()) {
         try {
@@ -45,9 +41,6 @@ export default function NfcScreen({ navigation }: any) {
     };
   }, [navigation]);
 
-  // =========================================================================
-  // 🚀 AUTOMATED PROVISIONING & DATA INTEGRATION ENGINE (CORE TECH)
-  // =========================================================================
   const handleNfcScan = async () => {
     try {
       const currentUser = auth.currentUser;
@@ -59,7 +52,6 @@ export default function NfcScreen({ navigation }: any) {
       setIsScanning(true);
       await NfcManager.requestTechnology(NfcTech.Ndef);
       
-      // 📡 STEP 1: Extract Unique Identifier (Hardware UID Token)
       const tag = await NfcManager.getTag();
       const tagId = tag?.id;
 
@@ -72,14 +64,10 @@ export default function NfcScreen({ navigation }: any) {
 
       console.log(`[NFC Subsystem] Tag Identifier Resolved. UID: ${tagId}`);
 
-      // 🔍 STEP 2: Database Registry Lookup and Sells Authorization Check
       const tagRef = doc(db, "nfc_tags", tagId);
       const tagSnap = await getDoc(tagRef);
 
       if (!tagSnap.exists()) {
-        // =========================================================================
-        // 🟢 PROVISIONING STAGE 1: UNASSIGNED HARDWARE (PAIRING PROTOCOL)
-        // =========================================================================
         setLoading(false);
         Alert.alert(
           "Tanımsız Akıllı Etiket Algılandı",
@@ -105,9 +93,6 @@ export default function NfcScreen({ navigation }: any) {
         const tagData = tagSnap.data();
 
         if (tagData.ownerUid === currentUser.uid) {
-          // =========================================================================
-          // 🛠️ PROVISIONING STAGE 2: OWNERSHIP CONFIRMED (DE-PROVISIONING PROTOCOL)
-          // =========================================================================
           setLoading(false);
           Alert.alert(
             "Yetkili Etiket Erişimi",
@@ -127,9 +112,6 @@ export default function NfcScreen({ navigation }: any) {
             ]
           );
         } else {
-          // =========================================================================
-          // 🛡️ PROVISIONING STAGE 3: EXTERNAL SEARCH CLIENT (COMPLIANCE SECURITY MODE)
-          // =========================================================================
           setLoading(false);
           console.log(`[Security Policy] External asset access authorized. Target Account Ref: ${tagData.ownerUid}`);
           
@@ -158,12 +140,9 @@ export default function NfcScreen({ navigation }: any) {
     }
   };
 
-  // =========================================================================
-  // 🧪 ENTERPRISE PIPELINE SIMULATION HUB (MANUAL OVERRIDE INTERFACE)
-  // =========================================================================
   const handleManualTestQuery = async () => {
     if (!testUid.trim()) {
-      Alert.alert("Veri Giriş Hatası", "Simülasyonu başlatmak için lütfen geçerli bir kullanıcı UID'si giriniz.");
+      Alert.alert("Veri Giriş Hatası", "Sorgulamayı başlatmak için lütfen geçerli bir kullanıcı referans kimliği giriniz.");
       return;
     }
 
@@ -177,12 +156,12 @@ export default function NfcScreen({ navigation }: any) {
         navigation.navigate('ProfileScreen', { targetUid: testUid.trim() });
       } else {
         setLoading(false);
-        Alert.alert("Kayıt Bulunamadı", "Girilen kullanıcı kimliği sistem veri tabanında doğrulanamadı. Lütfen Firestore koleksiyonlarını kontrol ediniz.");
+        Alert.alert("Kayıt Bulunamadı", "Girilen kullanıcı kimliği sistem veri tabanında doğrulanamadı.");
       }
     } catch (err) {
       setLoading(false);
-      console.error("[Simulation Module Error]:", err);
-      Alert.alert("Sistem Kesintisi", "Simülasyon işlemi sırasında dahili bir veri tabanı hatası oluştu.");
+      console.error("[Manual Query Module Error]:", err);
+      Alert.alert("Sistem Kesintisi", "Sorgulama işlemi sırasında dahili bir veri tabanı hatası oluştu.");
     }
   };
 
@@ -204,7 +183,6 @@ export default function NfcScreen({ navigation }: any) {
             </View>
           ) : (
             <>
-              {/* CORE PROVISIONING CALL TO ACTION */}
               <TouchableOpacity 
                 style={[styles.scanButton, isScanning && styles.scanButtonActive]} 
                 onPress={handleNfcScan}
@@ -220,19 +198,18 @@ export default function NfcScreen({ navigation }: any) {
                 </Text>
               </TouchableOpacity>
 
-              {/* 🧪 ENTERPRISE PIPELINE SIMULATION COMPONENT */}
               <View style={styles.testContainer}>
                 <View style={styles.testHeaderRow}>
-                  <MaterialCommunityIcons name="xml" size={18} color="#beaf9f" />
-                  <Text style={styles.testTitle}>Geliştirici Simülasyon Paneli</Text>
+                  <MaterialCommunityIcons name="shield-check" size={18} color="#beaf9f" />
+                  <Text style={styles.testTitle}>Manuel Kimlik Doğrulama Ünitesi</Text>
                 </View>
                 <Text style={styles.testSub}>
-                  NFC donanımı olmayan cihazlarda (Expo Go, standart Emülatörler) Bulucu Sayfası KVKK maskelemesini test etmek için aşağıya bir Veli UID'si giriniz:
+                  NFC donanımı aktif olmayan veya kısıtlı erişime sahip sistemlerde, acil durum veri tabanı senkronizasyonunu ve KVKK maskelemeli bulucu arayüzünü çağırmak için veli referans kimliğini manuel olarak girebilirsiniz:
                 </Text>
                 
                 <TextInput
                   style={styles.testInput}
-                  placeholder="Kullanıcı Kimliğini (UID) Giriniz"
+                  placeholder="Güvence Referans Kimliğini (UID) Giriniz"
                   placeholderTextColor="#8e8e93"
                   value={testUid}
                   onChangeText={setTestUid}
@@ -242,7 +219,7 @@ export default function NfcScreen({ navigation }: any) {
 
                 <TouchableOpacity style={styles.testQueryButton} onPress={handleManualTestQuery}>
                   <MaterialCommunityIcons name="shield-search" size={20} color="#fff" />
-                  <Text style={styles.testQueryButtonText}>BULUCU SİMÜLASYONUNU BAŞLAT</Text>
+                  <Text style={styles.testQueryButtonText}>ACİL DURUM PROFİLİNİ SORGULA</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -267,8 +244,6 @@ const styles = StyleSheet.create({
   buttonText: { fontSize: 11, fontWeight: 'bold', color: '#1c1c1e', marginTop: 15, textAlign: 'center', letterSpacing: 0.5, paddingHorizontal: 10, textTransform: 'uppercase' },
   loaderContainer: { justifyContent: 'center', alignItems: 'center', marginTop: 50 },
   loaderText: { marginTop: 14, fontSize: 13, color: '#8e8e93', fontWeight: '500' },
-
-  // SİMÜLATÖR PANELİ STYLES
   testContainer: { width: '100%', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e5ea', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2, marginBottom: 20 },
   testHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   testTitle: { fontSize: 12, fontWeight: '700', color: '#beaf9f', marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.5 },

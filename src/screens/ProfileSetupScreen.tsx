@@ -22,9 +22,6 @@ import BottomBar from '../components/BottomBar';
 
 const ITEM_HEIGHT = 40; 
 
-// =========================================================================
-// 🎯 TEKERLEK SEÇİCİ (SCROLL WHEEL PICKER) MOTORU - TASARIM VE İŞLEV KORUNDU
-// =========================================================================
 interface ScrollWheelPickerProps {
   data: string[];
   selectedValue: string;
@@ -130,7 +127,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [openPickerId, setOpenPickerId] = useState<string | null>(null);
 
-  // --- VELİ STATE TANIMLARI ---
   const [parentName, setParentName] = useState(incomingName);
   const [parentGender, setParentGender] = useState('');
   const [parentAge, setParentAge] = useState(''); 
@@ -144,7 +140,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   const [districtList, setDistrictList] = useState<string[]>([]);
   const [existingPhotoUrl, setExistingPhotoUrl] = useState('');
 
-  // --- BAĞIMLI (CANLI) STATE TANIMLARI ---
   const [dependentType, setDependentType] = useState(''); 
   const [dependentName, setDependentName] = useState('');
   const [dependentAge, setDependentAge] = useState(''); 
@@ -156,7 +151,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   const [dependentNote, setDependentNote] = useState('');
   const [dependentSubCategory, setDependentSubCategory] = useState('');
 
-  // Orijinal yedek referansı
   const dbBackupRef = useRef<any>(null);
 
   const getParentAgeItems = () => {
@@ -165,22 +159,40 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
   };
 
   const getDependentAgeItems = () => {
+    if (dependentType === 'Yaşlı') {
+      const items = Array.from({ length: 51 }, (_, i) => String(i + 60));
+      return ['Seçiniz', ...items];
+    }
     const limit = dependentType === 'Evcil Hayvan' ? 31 : 19;
     const items = Array.from({ length: limit }, (_, i) => String(i));
     return ['Seçiniz', ...items];
   };
 
   const getBoyItems = () => {
+    if (dependentType === 'Yaşlı') {
+      const items = Array.from({ length: 66 }, (_, i) => `${i + 140} cm`);
+      return ['Seçiniz', ...items];
+    }
     const items = Array.from({ length: 191 }, (_, i) => `${i + 30} cm`);
     return ['Seçiniz', ...items];
   };
 
   const getKiloItems = () => {
+    if (dependentType === 'Yaşlı') {
+      const items = Array.from({ length: 111 }, (_, i) => `${i + 40} kg`);
+      return ['Seçiniz', ...items];
+    }
     const items = Array.from({ length: 148 }, (_, i) => `${i + 3} kg`);
     return ['Seçiniz', ...items];
   };
 
-  // Veri Yükleme Motoru - KORUMALI NİZAM
+  const getDependentGenderItems = () => {
+    if (dependentType === 'Çocuk') {
+      return ['Seçiniz', 'Erkek', 'Kadın'];
+    }
+    return ['Seçiniz', 'Erkek', dependentType === 'Evcil Hayvan' ? 'Dişi' : 'Kadın', 'Belirtmek İstemiyorum'];
+  };
+
   useEffect(() => {
     let isMounted = true;
     const loadProfileData = async () => {
@@ -262,7 +274,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
     return () => { isMounted = false; };
   }, [incomingName]);
 
-  // 🔥 CRASH ÖNLEYİCİ MÜHÜRLÜ TURKEY-NEIGHBOURHOODS MOTORU
   useEffect(() => {
     if (!parentCity || parentCity.trim() === '' || parentCity === 'Şehir Seçiniz') {
       setDistrictList([]);
@@ -334,9 +345,19 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
       setDependentSubCategory('');
       setDependentName('');
       setDependentChipNumber('');
-      setDependentAge('');
-      setDependentBoy('');
-      setDependentKilo('');
+      if (selectedCategory === 'Yaşlı') {
+        setDependentAge('');
+        setDependentBoy('');
+        setDependentKilo('');
+      } else if (selectedCategory === 'Çocuk') {
+        setDependentAge('');
+        setDependentBoy('');
+        setDependentKilo('');
+      } else {
+        setDependentAge('');
+        setDependentBoy('');
+        setDependentKilo('');
+      }
       setDependentGender('');
       setDependentBloodType('');
       setDependentNote('');
@@ -357,7 +378,9 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
 
     setIsDataLoading(true);
     
-    const hwValue = dependentBoy || dependentKilo ? `${dependentBoy || '120 cm'} - ${dependentKilo || '30 kg'}` : '';
+    const defaultBoyValue = dependentType === 'Yaşlı' ? '165 cm' : '120 cm';
+    const defaultKiloValue = dependentType === 'Yaşlı' ? '70 kg' : '30 kg';
+    const hwValue = dependentBoy || dependentKilo ? `${dependentBoy || defaultBoyValue} - ${dependentKilo || defaultKiloValue}` : '';
 
     const finalData = {
       dependent: {
@@ -423,7 +446,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
           <Text style={styles.headerTitle}>NFCTT Profil Kurulumu</Text>
         </View>
 
-        {/* SEKME/TAB YAPISI */}
         <View style={styles.tabContainer}>
           <TouchableOpacity style={[styles.tabButton, activeTab === 'parent' && styles.tabButtonActive]} onPress={() => setActiveTab('parent')}>
             <Text style={[styles.tabButtonText, activeTab === 'parent' && styles.tabButtonTextActive]}>1. Veli Bilgileri</Text>
@@ -433,7 +455,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* VELİ SEKMESİ İÇERİĞİ */}
         {activeTab === 'parent' && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>1. Hesap Sahibi (Veli) Bilgileri</Text>
@@ -514,7 +535,6 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {/* CANLI SEKMESİ İÇERİĞİ */}
         {activeTab === 'dependent' && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>2. Koruma Altındaki Canlı Bilgileri</Text>
@@ -564,7 +584,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                   <ScrollWheelPicker
                     selectedValue={dependentAge}
                     data={getDependentAgeItems()}
-                    initialFocusValue={dependentType === 'Evcil Hayvan' ? '2' : '7'} 
+                    initialFocusValue={dependentType === 'Yaşlı' ? '70' : dependentType === 'Evcil Hayvan' ? '2' : '7'} 
                     onValueChange={(val) => setDependentAge(val)}
                   />
                 )}
@@ -576,7 +596,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                 {openPickerId === 'd-gender' && (
                   <ScrollWheelPicker
                     selectedValue={dependentGender}
-                    data={['Seçiniz', 'Erkek', dependentType === 'Evcil Hayvan' ? 'Dişi' : 'Kadın', 'Belirtmek İstemiyorum']}
+                    data={getDependentGenderItems()}
                     onValueChange={(val) => setDependentGender(val)}
                     autoCloseTrigger={() => setOpenPickerId(null)}
                   />
@@ -592,7 +612,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                       <ScrollWheelPicker
                         selectedValue={dependentBoy}
                         data={getBoyItems()}
-                        initialFocusValue="120 cm" 
+                        initialFocusValue={dependentType === 'Yaşlı' ? '165 cm' : '120 cm'} 
                         onValueChange={(val) => setDependentBoy(val)}
                       />
                     )}
@@ -605,7 +625,7 @@ export default function ProfileSetupScreen({ navigation, route }: any) {
                       <ScrollWheelPicker
                         selectedValue={dependentKilo}
                         data={getKiloItems()}
-                        initialFocusValue="30 kg" 
+                        initialFocusValue={dependentType === 'Yaşlı' ? '70 kg' : '30 kg'} 
                         onValueChange={(val) => setDependentKilo(val)}
                       />
                     )}
@@ -672,15 +692,15 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 13, fontWeight: '700', color: '#48484a', marginTop: 12, marginBottom: 6 },
   input: { backgroundColor: '#f2f2f7', padding: 12, borderRadius: 8, marginBottom: 4, fontSize: 15, color: '#000' },
   customPickerBox: { backgroundColor: '#f2f2f7', padding: 14, borderRadius: 8, marginBottom: 4, borderWidth: 0.5, borderColor: '#e5e5ea', justifyContent: 'center' },
-  pickerBoxText: { fontSize: 15, color: '#1c1c1e', fontWeight: '500' },
+  pickerBoxText: { fontSize: 15, color: '#000', fontWeight: '400' },
   pickerContainer: { backgroundColor: '#f2f2f7', borderRadius: 8, marginBottom: 4, overflow: 'hidden', borderWidth: 0.5, borderColor: '#e5e5ea' },
   wheelWrapper: { backgroundColor: '#f2f2f7', borderRadius: 10, borderWidth: 0.5, borderColor: '#beaf9f', marginVertical: 6, height: ITEM_HEIGHT * 3, overflow: 'hidden', position: 'relative' },
   wheelSelectionIndicator: { position: 'absolute', top: ITEM_HEIGHT, left: 0, right: 0, height: ITEM_HEIGHT, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#beaf9f', backgroundColor: 'rgba(209, 199, 189, 0.2)' },
   wheelScrollView: { width: '100%', height: '100%' },
   wheelItem: { height: ITEM_HEIGHT, justifyContent: 'center', alignItems: 'center', width: '100%' },
   wheelItemClickZone: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
-  wheelItemText: { fontSize: 15, color: '#8e8e93', fontWeight: '500' },
-  wheelItemTextSelected: { color: '#2b231a', fontWeight: '700', fontSize: 16 },
+  wheelItemText: { fontSize: 15, color: '#000', fontWeight: '400' },
+  wheelItemTextSelected: { color: '#000', fontWeight: '400', fontSize: 16 },
   typeButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, gap: 10, marginTop: 5 },
   typeButton: { flex: 1, padding: 12, backgroundColor: '#f2f2f7', borderRadius: 10, alignItems: 'center', borderWidth: 0.5, borderColor: '#e5e5ea' },
   typeButtonSelected: { backgroundColor: '#d1c7bd', borderColor: '#beaf9f' },
