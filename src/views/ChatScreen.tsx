@@ -19,7 +19,7 @@ interface Message {
   senderId: string;
   text: string;
   timestamp: any;
-  type?: 'text' | 'location';
+  type: 'text' | 'location'; // 🛡️ Opsiyonel olmaktan çıkartıp kurumsallaştırdık kanka
   latitude?: number;
   longitude?: number;
 }
@@ -185,14 +185,12 @@ export default function ChatScreen({ route, navigation }: any) {
   useEffect(() => {
     if (!activeRoomId || !currentUser) return;
 
-    // Eğer oda sistem bildirim odası ise, alt koleksiyon yerine direkt broadcast dökümanını dinliyoruz reis kalkanı mühürledik!
     if (activeRoomId === 'system_welcome') {
       const systemBroadcastRef = doc(db, "system_notifications", "broadcast");
       
       const unsubscribeSystem = onSnapshot(systemBroadcastRef, (docSnap) => {
         const fetchedMessages: Message[] = [];
         
-        // İlk karşılama statik mesajı kurumsal nizamda ekleniyor
         fetchedMessages.push({
           id: 'welcome_static',
           senderId: 'system',
@@ -201,7 +199,6 @@ export default function ChatScreen({ route, navigation }: any) {
           type: 'text'
         });
 
-        // 📢 BREVO SENKRONİZASYONLU DİNAMİK DUYURU BALONU MOTORU
         if (docSnap.exists()) {
           const sysData = docSnap.data();
           if (sysData.lastMessage) {
@@ -223,7 +220,6 @@ export default function ChatScreen({ route, navigation }: any) {
       return unsubscribeSystem;
     }
 
-    // 📡 DURUM B: Normal Kullanıcılar Arası Mesajlaşma Akışı
     const messagesQuery = query(
       collection(db, "chat_rooms", activeRoomId, "messages"),
       orderBy("timestamp", "asc")
@@ -254,14 +250,15 @@ export default function ChatScreen({ route, navigation }: any) {
             if (msgTime <= clearTime) return; 
           }
 
+          // 🛡️ GÜVENLİ PARS ETME MOTORU (TİP UYUŞMAZLIĞI KALKANI)
           fetchedMessages.push({
             id: docSnap.id,
             senderId: data.senderId,
-            text: data.text || '',
+            text: typeof data.text === 'string' ? data.text : '📍 Konum verisi alındı',
             timestamp: msgTimestamp,
-            type: data.type || 'text',
-            latitude: data.latitude,
-            longitude: data.longitude
+            type: data.type === 'location' ? 'location' : 'text', // Tip eşleştirmesi mühürlendi kanka
+            latitude: Number(data.latitude) || undefined,
+            longitude: Number(data.longitude) || undefined
           });
         });
 
@@ -280,7 +277,6 @@ export default function ChatScreen({ route, navigation }: any) {
     return unsubscribe;
   }, [activeRoomId]);
 
-  // === 🚀 KURUMSAL METİN MESAJI GÖNDERME MOTORU ===
   const handleSendMessage = async () => {
     if (inputText.trim() === '' || !currentUser || !targetUid) return;
     if (activeRoomId === 'system_welcome') { setInputText(''); return; }
@@ -307,7 +303,6 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
-  // === 📍 ACİL DURUM CANLI KONUM ENJEKSİYONU ===
   const handleSendLocation = async () => {
     if (activeRoomId === 'system_welcome' || !currentUser || !targetUid) return;
 
@@ -340,7 +335,6 @@ export default function ChatScreen({ route, navigation }: any) {
       console.error("[GPS Subsystem Error] Lokasyon verisi fırlatılamadı:", error);
       Alert.alert('Bağlantı Hatası', 'GPS koordinatları çekilemedi, lütfen tekrar deneyiniz.');
     } finally {
-      setLoading(false);
       setLocationLoading(false);
     }
   };
@@ -381,6 +375,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
     const renderBubbleContent = () => (
       <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble, item.type === 'location' && styles.mapBubble]}>
+        {/* 🛡️ SÜPER EMNİYET KEMERLİ HARİTA BALONU YAPISI */}
         {item.type === 'location' && item.latitude && item.longitude ? (
           <TouchableOpacity 
             style={styles.mapContainer} 

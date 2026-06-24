@@ -25,10 +25,15 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "NFC",
-        "android.permission.NFC"
+        "FOREGROUND_SERVICE",
+        "NFC"
       ],
-      "package": "com.veyselfaruk.nfctt"
+      "package": "com.veyselfaruk.nfctt",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCc60mceTAps143Y35zgjLb8K30VZ1iftQ"
+        }
+      }
     },
     "plugins": [
       "react-native-nfc-manager"
@@ -37,6 +42,10 @@
       "eas": {
         "projectId": "db04c247-0261-4fec-9c8c-c6260f228552"
       }
+    },
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/db04c247-0261-4fec-9c8c-c6260f228552"
     }
   }
 }
