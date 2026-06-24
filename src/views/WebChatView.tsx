@@ -250,7 +250,6 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
     }
   };
 
-  // 📍 WEB UYUMLU TARAYICI GPS KONUM MOTORU
   const handleSendLocationWeb = () => {
     if (activeRoomId === 'system_welcome' || !currentUser || !targetUid) return;
 
@@ -301,7 +300,7 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
   };
 
   const openExternalMapWeb = (lat: number, lng: number) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    const url = `https://maps.google.com/?q=${lat},${lng}`;
     Linking.openURL(url).catch(() => alert("Harita linki açılamadı."));
   };
 
@@ -327,7 +326,6 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
             onPress={() => openExternalMapWeb(item.latitude!, item.longitude!)}
             activeOpacity={0.8}
           >
-            {/* 🖥️ WEB HARİTA ÇÖZÜMÜ: Yerel mobil harita yerine tıklanabilir şık GPS kartı */}
             <View style={styles.webMapPlaceholder}>
               <Ionicons name="map-outline" size={32} color="#beaf9f" />
               <Text style={{fontSize: 12, color: '#666', marginTop: 5, fontWeight: 'bold'}}>Koordinat: {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}</Text>
@@ -431,7 +429,6 @@ export default function WebChatView() {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
-  // Mobildeysek ve bir oda seçildiyse sadece odayı göster, seçilmediyse listeyi göster
   if (isMobile) {
     if (selectedRoom) {
       return (
@@ -446,7 +443,6 @@ export default function WebChatView() {
     return <WebChatList onSelectChat={(roomId, targetUid, title) => setSelectedRoom({ roomId, targetUid, title })} />;
   }
 
-  // 🖥️ MASAÜSTÜ: Listeyi solda, mesajları sağda yan yana gösteren Instagram stili!
   return (
     <View style={styles.splitMainContainer}>
       <View style={styles.splitLeftMenu}>
@@ -474,10 +470,25 @@ export default function WebChatView() {
 // 🎨 STYLES
 // =========================================================================
 const styles = StyleSheet.create({
-  splitMainContainer: { flex: 1, flexDirection: 'row', backgroundColor: '#ffffff' },
+  // 💻 Masaüstü ve genel ekran taşıyıcısı esnek ve tam ekran kalıyor
+  splitMainContainer: { 
+  flex: 1, 
+  flexDirection: 'row', 
+  backgroundColor: '#ffffff',
+  height: (Platform.OS === 'web' ? '100vh' : '100%') as any, // 👈 as any ekledik
+  maxHeight: (Platform.OS === 'web' ? '100vh' : undefined) as any
+},
   splitLeftMenu: { width: 350, borderRightWidth: 0.5, borderColor: '#e5e5ea', height: '100%' },
   splitRightChat: { flex: 1, height: '100%', backgroundColor: '#f8f9fa' },
-  chatScreenContainer: { flex: 1, height: '100%', backgroundColor: '#ffffff' },
+  
+  // 📱 Mobil tarayıcılarda klavye açılınca tüm sayfanın ezilmesini ve inputun kaçmasını çözen alan
+  chatScreenContainer: { 
+  flex: 1, 
+  backgroundColor: '#ffffff',
+  height: (Platform.OS === 'web' ? '100vh' : '100%') as any, // 👈 as any ekledik
+  maxHeight: (Platform.OS === 'web' ? '100vh' : undefined) as any,
+  overflow: 'hidden'
+},
   contentFlex: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
@@ -505,7 +516,6 @@ const styles = StyleSheet.create({
   myBubble: { backgroundColor: 'rgba(85, 85, 95, 0.88)', borderBottomRightRadius: 4 },
   otherBubble: { backgroundColor: 'rgba(242, 242, 247, 0.92)', borderBottomLeftRadius: 4, borderWidth: 0.5, borderColor: 'rgba(0, 0, 0, 0.04)' },
   
-  // Web Özel Konum Kartı
   mapBubbleWeb: { width: 240, padding: 0, overflow: 'hidden', borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e5ea' },
   mapContainerWeb: { width: '100%' },
   webMapPlaceholder: { width: '100%', height: 110, backgroundColor: '#fdfbf9', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 0.5, borderColor: '#e5e5ea' },
@@ -518,7 +528,16 @@ const styles = StyleSheet.create({
   systemMessageContainer: { backgroundColor: 'rgba(249, 249, 251, 0.85)', borderWidth: 1, borderColor: '#e5e5ea', padding: 15, borderRadius: 12, marginVertical: 10, alignItems: 'center', width: '100%' },
   systemMessageText: { fontSize: 12, color: '#666666', textAlign: 'center', lineHeight: 18, fontWeight: '500' },
   
-  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 12, borderTopWidth: 0.5, borderColor: '#e5e5ea', backgroundColor: '#ffffff' },
+  // Input barı absolute yapmayıp flex yapısının doğal bir parçası olarak tabana mühürledik
+  inputContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 15, 
+    paddingVertical: 12, 
+    borderTopWidth: 0.5, 
+    borderColor: '#e5e5ea', 
+    backgroundColor: '#ffffff'
+  },
   locationButton: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', marginRight: 5 },
   input: { flex: 1, backgroundColor: '#f2f2f7', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, fontSize: 15, color: '#1c1c1e', fontWeight: '500' },
   sendButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#beaf9f', justifyContent: 'center', alignItems: 'center', marginLeft: 10 },

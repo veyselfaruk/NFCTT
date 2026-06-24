@@ -17,6 +17,7 @@ import WebChatView from './src/views/WebChatView';
 import WebNfcView from './src/views/WebNfcView';
 import WebProfileView from './src/views/WebProfileView';
 import WebProfileSetupView from './src/views/WebProfileSetupView';
+import * as Font from 'expo-font';
 
 // =========================================================================
 // 📱 COMPONENT: RESPONSIVE MENU (MASAÜSTÜNDE SOLDA, MOBİLDE ALTA GEÇER)
@@ -130,6 +131,7 @@ function NavigationMenu({ navigation, activeScreen, onClearTargetUid }: MenuProp
 // 🚀 MAIN APPLICATION: APP COMPONENT
 // =========================================================================
 export default function App() {
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
@@ -146,14 +148,31 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      const savedUser = localStorage.getItem('nfctt_user');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
+  async function prepareApp() {
+    try {
+      if (Platform.OS === 'web') {
+        // Mevcut oturum kontrol kodun burada kalacak kanka:
+        const savedUser = localStorage.getItem('nfctt_user');
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+
+        // TAM BURAYA ŞU FONT YÜKLEME SATIRINI EKLE:
+        await Font.loadAsync({
+          'Ionicons': require('./src/fonts/Ionicons.b4eb097d35f44ed943676fd56f6bdc51.ttf'), 
+          // Not: Dosya konumuna göre yolunu (../) gerekirse ayarlarsın.
+        });
       }
+    } catch (error) {
+      console.log("Hazırlık hatası:", error);
+    } finally {
+      setIsCheckingAuth(false);
+      setFontsLoaded(true); // Yükleme bittiğinde kilidi açıyoruz
     }
-    setIsCheckingAuth(false);
-  }, []);
+  }
+
+  prepareApp();
+}, []);
 
   const handleLoginSuccess = (userData: any) => {
     setUser(userData);
