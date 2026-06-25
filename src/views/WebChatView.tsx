@@ -20,9 +20,6 @@ interface Message {
   longitude?: number;
 }
 
-// =========================================================================
-// 🖥️ WEB UYUMLU MESAJ SATIRI (KAYDIRMA YERİNE ÜZERİNE GELİNCE SİLME AKSİYONLU)
-// =========================================================================
 function WebMessageRow({ 
   item, 
   isMyMessage, 
@@ -57,7 +54,6 @@ function WebMessageRow({
           {renderMessageContent()}
         </View>
 
-        {/* 🗑️ Web Tarafında Bireysel Mesaj Silme İkonu (Sabit ve Şık) */}
         {item.id !== 'welcome_static' && item.id !== 'system_broadcast' && (
           <TouchableOpacity 
             style={[styles.webMsgDeleteBtn, isMyMessage ? { marginRight: 8 } : { marginLeft: 8 }]} 
@@ -72,9 +68,6 @@ function WebMessageRow({
   );
 }
 
-// =========================================================================
-// 💬 DETAYLI MESAJLAŞMA PENCERESİ (WEB CHAT SCREEN)
-// =========================================================================
 function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, targetUid: string, title: string, onBack?: () => void }) {
   const activeRoomId = roomId || 'system_welcome';
   
@@ -82,7 +75,7 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [locationLoading, setLocationLoading] = useState(false);
-  const [dynamicTitle, setDynamicTitle] = useState(title || 'Güvenli İletişim Kanalı');
+  const [dynamicTitle, setDynamicTitle] = useState(title || 'İletişim Kanalı');
   
   const [targetAvatar, setTargetAvatar] = useState<string | null>(null);
   const [targetInitials, setTargetInitials] = useState('👤');
@@ -105,7 +98,7 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
           const computedName = actualData?.parent?.name || actualData?.dependent?.name || "Kullanıcı";
           
           if (actualData?.dependent?.name) {
-            setDynamicTitle(`${actualData.dependent.name} - Güvence Hattı`);
+            setDynamicTitle(`${actualData.dependent.name} - İletişim Hattı`);
           } else if (actualData?.parent?.name) {
             setDynamicTitle(actualData.parent.name);
           }
@@ -126,7 +119,7 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
           setTargetAvatar(resolvedAvatar);
         }
       } catch (err) {
-        console.error("[Header Fetch Error] Bilgi çekilemedi:", err);
+        console.error("Profil bilgileri alınamadı:", err);
       }
     };
 
@@ -144,7 +137,7 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
         fetchedMessages.push({
           id: 'welcome_static',
           senderId: 'system',
-          text: 'Akıllı koruma etiket sisteminiz başarıyla aktif duruma getirilmiştir. Profil sayfanızdan acil durum tıbbi notlarını ve güvence albümünü eksiksiz doldurmayı unutmayınız.',
+          text: 'Akıllı koruma etiket sisteminiz aktif duruma getirilmiştir. Profil sayfanızdan tıbbi notları ve albüm alanını doldurabilirsiniz.',
           timestamp: new Date(),
           type: 'text'
         });
@@ -213,11 +206,11 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
         setMessages(fetchedMessages);
         setLoading(false);
       } catch (err) {
-        console.error("[Message Filter Error]:", err);
+        console.error("Mesaj listeleme hatası:", err);
         setLoading(false);
       }
     }, (error) => {
-      console.error("[Firestore Sync Error]:", error);
+      console.error("Veri senkronizasyon hatası:", error);
       setLoading(false);
     });
 
@@ -246,62 +239,68 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
         [`unreadCount.${targetUid}`]: (messages.length + 1)
       });
     } catch (error) {
-      console.error("[Delivery Failure]:", error);
+      console.error("Mesaj gönderilemedi:", error);
     }
   };
 
   const handleSendLocationWeb = () => {
     if (activeRoomId === 'system_welcome' || !currentUser || !targetUid) return;
 
-    if (!navigator.geolocation) {
-      alert("Tarayıcınız GPS konum servislerini desteklemiyor kral.");
+    if (Platform.OS === 'web' && !navigator.geolocation) {
+      alert("Tarayıcınız konum servislerini desteklememektedir.");
       return;
     }
 
     setLocationLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        try {
-          await addDoc(collection(db, "chat_rooms", activeRoomId, "messages"), {
-            senderId: currentUser.uid,
-            text: '📍 Güvenli konum paylaşıldı',
-            type: 'location',
-            latitude,
-            longitude,
-            timestamp: serverTimestamp()
-          });
+    const geoOptions = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
 
-          await updateDoc(doc(db, "chat_rooms", activeRoomId), {
-            lastMessage: '📍 Güvenli konum paylaşıldı',
-            updatedAt: serverTimestamp(),
-            visibleTo: arrayUnion(currentUser.uid, targetUid)
-          });
-        } catch (error) {
-          console.error("Firestore konum kayıt hatası:", error);
-        } finally {
-          setLocationLoading(false);
-        }
-      },
-      (error) => {
-        console.error("GPS Hata:", error);
-        alert("Konum izni reddedildi veya GPS koordinatları alınamadı reis.");
+    const successCallback = async (position: any) => {
+      const { latitude, longitude } = position.coords;
+      try {
+        await addDoc(collection(db, "chat_rooms", activeRoomId, "messages"), {
+          senderId: currentUser.uid,
+          text: '📍 Konum paylaşıldı',
+          type: 'location',
+          latitude,
+          longitude,
+          timestamp: serverTimestamp()
+        });
+
+        await updateDoc(doc(db, "chat_rooms", activeRoomId), {
+          lastMessage: '📍 Konum paylaşıldı',
+          updatedAt: serverTimestamp(),
+          visibleTo: arrayUnion(currentUser.uid, targetUid)
+        });
+      } catch (error) {
+        console.error("Veri kayıt hatası:", error);
+      } finally {
         setLocationLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
+      }
+    };
+
+    const errorCallback = (error: any) => {
+      console.error("GPS Hatası:", error);
+      alert("Konum izni reddedildi veya koordinat bilgisi alınamadı.");
+      setLocationLoading(false);
+    };
+
+    if (Platform.OS === 'web') {
+      navigator.geolocation.getCurrentPosition(successCallback, errorCallback, geoOptions);
+    } else {
+      setLocationLoading(false);
+    }
   };
 
   const handleLocalDeleteMessage = (messageId: string) => {
-    const isConfirm = confirm("Bu mesajı ekranınızdan kaldırmak istiyor musunuz?");
+    const isConfirm = confirm("Mesajı yerel ekrandan kaldırmak istiyor musunuz?");
     if (isConfirm) {
       setDeletedMessageIds(prev => [...prev, messageId]);
     }
   };
 
   const openExternalMapWeb = (lat: number, lng: number) => {
-    const url = `https://maps.google.com/?q=${lat},${lng}`;
-    Linking.openURL(url).catch(() => alert("Harita linki açılamadı."));
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    Linking.openURL(url).catch(() => alert("Harita bağlantısı açılamadı."));
   };
 
   const renderMessageItem = ({ item }: { item: Message }) => {
@@ -365,7 +364,7 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
           <Text style={styles.headerTitle} numberOfLines={1}>
             {activeRoomId === 'system_welcome' ? 'NFCTT Sistem Bildirimleri' : dynamicTitle}
           </Text>
-          <Text style={styles.headerSubtitle}>{activeRoomId === 'system_welcome' ? 'Resmi Duyuru Kanalı' : 'Çevrimiçi'}</Text>
+          <Text style={styles.headerSubtitle}>{activeRoomId === 'system_welcome' ? 'Bilgilendirme Kanalı' : 'Çevrimiçi'}</Text>
         </View>
       </View>
 
@@ -389,7 +388,7 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
         </ImageBackground>
       </View>
 
-      {/* INPUT */}
+      {/* INPUT BAR */}
       {activeRoomId !== 'system_welcome' && (
         <View style={styles.inputContainer}>
           <TouchableOpacity 
@@ -406,11 +405,12 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
 
           <TextInput
             style={styles.input}
-            placeholder="Mesajınızı güvenle yazın..."
+            placeholder="Mesajınızı yazınız..."
             placeholderTextColor="#8e8e93"
             value={inputText}
             onChangeText={setInputText}
             onSubmitEditing={handleSendMessage}
+            {...((Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) as any)} 
           />
           <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
             <Ionicons name="send" size={16} color="#ffffff" />
@@ -421,9 +421,6 @@ function WebChatScreen({ roomId, targetUid, title, onBack }: { roomId: string, t
   );
 }
 
-// =========================================================================
-// 🔄 MERGED SPLIT VIEW: CHAT LIST VE SCREEN BİR ARADA (INSTAGRAM WEB MIMARI)
-// =========================================================================
 export default function WebChatView() {
   const [selectedRoom, setSelectedRoom] = useState<{ roomId: string, targetUid: string, title: string } | null>(null);
   const { width } = useWindowDimensions();
@@ -458,7 +455,7 @@ export default function WebChatView() {
         ) : (
           <View style={styles.emptyStateContainer}>
             <Ionicons name="chatbubbles-outline" size={64} color="#beaf9f" />
-            <Text style={styles.emptyStateText}>Mesajlarınızı görüntülemek için sol listeden bir sohbet seçin kral.</Text>
+            <Text style={styles.emptyStateText}>Mesajları görüntülemek için sol panelden bir sohbet seçiniz.</Text>
           </View>
         )}
       </View>
@@ -466,30 +463,26 @@ export default function WebChatView() {
   );
 }
 
-// =========================================================================
-// 🎨 STYLES
-// =========================================================================
 const styles = StyleSheet.create({
-  // 💻 Masaüstü ve genel ekran taşıyıcısı esnek ve tam ekran kalıyor
   splitMainContainer: { 
-  flex: 1, 
-  flexDirection: 'row', 
-  backgroundColor: '#ffffff',
-  height: (Platform.OS === 'web' ? '100vh' : '100%') as any, // 👈 as any ekledik
-  maxHeight: (Platform.OS === 'web' ? '100vh' : undefined) as any
-},
+    flex: 1, 
+    flexDirection: 'row', 
+    backgroundColor: '#ffffff',
+    height: (Platform.OS === 'web' ? '100vh' : '100%') as any,
+    maxHeight: (Platform.OS === 'web' ? '100vh' : undefined) as any
+  },
   splitLeftMenu: { width: 350, borderRightWidth: 0.5, borderColor: '#e5e5ea', height: '100%' },
   splitRightChat: { flex: 1, height: '100%', backgroundColor: '#f8f9fa' },
   
-  // 📱 Mobil tarayıcılarda klavye açılınca tüm sayfanın ezilmesini ve inputun kaçmasını çözen alan
   chatScreenContainer: { 
-  flex: 1, 
-  backgroundColor: '#ffffff',
-  height: (Platform.OS === 'web' ? '100vh' : '100%') as any, // 👈 as any ekledik
-  maxHeight: (Platform.OS === 'web' ? '100vh' : undefined) as any,
-  overflow: 'hidden'
-},
-  contentFlex: { flex: 1 },
+    flex: 1, 
+    backgroundColor: '#ffffff',
+    height: (Platform.OS === 'web' ? '100vh' : '100%') as any,
+    maxHeight: (Platform.OS === 'web' ? '100vh' : undefined) as any,
+    overflow: 'hidden'
+  },
+  
+  contentFlex: { flex: 1, flexShrink: 1 }, 
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 0.5, borderColor: '#e5e5ea', backgroundColor: '#ffffff', height: 65 },
@@ -528,7 +521,6 @@ const styles = StyleSheet.create({
   systemMessageContainer: { backgroundColor: 'rgba(249, 249, 251, 0.85)', borderWidth: 1, borderColor: '#e5e5ea', padding: 15, borderRadius: 12, marginVertical: 10, alignItems: 'center', width: '100%' },
   systemMessageText: { fontSize: 12, color: '#666666', textAlign: 'center', lineHeight: 18, fontWeight: '500' },
   
-  // Input barı absolute yapmayıp flex yapısının doğal bir parçası olarak tabana mühürledik
   inputContainer: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -536,12 +528,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12, 
     borderTopWidth: 0.5, 
     borderColor: '#e5e5ea', 
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
+    flexShrink: 0
   },
   locationButton: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', marginRight: 5 },
-  input: { flex: 1, backgroundColor: '#f2f2f7', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, fontSize: 15, color: '#1c1c1e', fontWeight: '500' },
+  
+  input: { 
+    flex: 1, 
+    backgroundColor: '#f2f2f7', 
+    borderRadius: 20, 
+    paddingHorizontal: 15, 
+    paddingVertical: 8, 
+    fontSize: 15, 
+    color: '#1c1c1e', 
+    fontWeight: '500',
+    minHeight: 40,
+    height: Platform.OS === 'web' ? 40 : undefined
+  },
+  
   sendButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#beaf9f', justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
-
   emptyStateContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyStateText: { marginTop: 15, fontSize: 16, color: '#8e8e93', fontWeight: '500', textAlign: 'center', maxWidth: 400 }
 });
