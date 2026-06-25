@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; 
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
   ActivityIndicator, ScrollView, useWindowDimensions 
@@ -8,20 +8,75 @@ import { db, auth } from '../config/firebaseConfig';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface WebNfcViewProps {
-  // Profil sayfasına yönlendirme yapabilmek için App.web.tsx'ten geçireceğimiz tetikleyici fonksiyon
   onNavigateToProfile: (targetUid: string) => void;
+  urlTagId?: string | null; // 🔥 App.web.tsx'ten gelen canlı URL parametresi kanka
 }
 
-export default function WebNfcView({ onNavigateToProfile }: WebNfcViewProps) {
-  const [tagIdInput, setTagIdInput] = useState('');
+export default function WebNfcView({ onNavigateToProfile, urlTagId }: WebNfcViewProps) {
+  const [tagIdInput, setTagIdInput] = useState(''); // NFC Tag ID arama kutusu
+  const [testUid, setTestUid] = useState('');       // Manuel Profil UID arama kutusu
   const [loading, setLoading] = useState(false);
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
-  const currentUser = auth.currentUser;
+  // Tarayıcı asenkron kilitlenmesini çözen dinamik auth takibi
+  const [currentUser, setCurrentUser] = useState(auth.currentUser);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // =========================================================================
-  // 🚀 CORE WEB PROVISIONING ENGINE (FIREBASE LOGIC RECONSTRUCTED)
+  // 📡 1. ÜNİTE: OTOMATİK URL SORGULAMA TETİKLEYİCİSİ (VELİ REFERANS ODAKLI RADAR)
+  // =========================================================================
+  useEffect(() => {
+    // Eğer URL'den temiz bir ID yakalandıysa doğrudan alt mekanizmayı tetikle kral
+    if (urlTagId && urlTagId.trim() !== '') {
+      const cleanId = urlTagId.trim();
+      setTestUid(cleanId); // Görsel olarak alttaki Manuel Ünite kutusunu doldur kanka
+      
+      // State ve arayüz animasyonlarının oturması için küçük bir nefes aldırıp sorguluyoruz
+      const timeout = setTimeout(() => {
+        handleManualTestQueryDirect(cleanId);
+      }, 500);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [urlTagId]);
+
+  // =========================================================================
+  // 🚀 2. ÜNİTE: HEM URL'DEN HEM BUTONDAN GELEN VELİ KİMLİĞİNİ DOĞRUDAN SORGULAYAN MOTOR
+  // =========================================================================
+  const handleManualTestQueryDirect = async (targetUid: string) => {
+    setLoading(true);
+
+    try {
+      // 🎯 Domaine girilen ID bir kullanıcı ID'si olduğu için doğrudan "profiles" tabanına vuruyoruz
+      const profileRef = doc(db, "profiles", targetUid);
+      const profileSnap = await getDoc(profileRef);
+
+      if (profileSnap.exists()) {
+        setLoading(false);
+        console.log("Veli profili URL üzerinden başarıyla doğrulandı, fırlatılıyor...");
+        // Profil başarıyla bulundu, bulucu modunda üst katmana yönlendirip maskeli kartı açıyoruz
+        onNavigateToProfile(targetUid);
+      } else {
+        setLoading(false);
+        alert(`Kayıt Bulunamadı: Adres çubuğundan gelen [${targetUid}] referans kimliği profiles veri tabanında doğrulanamadı.`);
+      }
+    } catch (err) {
+      console.error("[Manual Query Direct Module Error]:", err);
+      alert("Profil sorgulanırken dahili bir veri tabanı hatası oluştu kanka.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================================================================
+  // 🛰️ KISIM 1: MANUEL BUTONA BASILDIĞINDA ÇALIŞAN NORMAL ETİKET (NFC) SORGUSU
   // =========================================================================
   const handleWebTagQuery = async () => {
     if (!tagIdInput.trim()) {
@@ -42,7 +97,6 @@ export default function WebNfcView({ onNavigateToProfile }: WebNfcViewProps) {
       const tagSnap = await getDoc(tagRef);
 
       if (!tagSnap.exists()) {
-        // 🟢 SENARYO 1: TANIMSIZ ETİKET (HESABA EŞLEŞTİRME PROTOKOLÜ)
         setLoading(false);
         const confirmPair = confirm(`[${cleanTagId}] benzersiz numaralı etiket sistemde kayıtlı değil. Bu etiketi kendi hesabınızla eşleştirmek istiyor musunuz?`);
         
@@ -61,7 +115,6 @@ export default function WebNfcView({ onNavigateToProfile }: WebNfcViewProps) {
         const tagData = tagSnap.data();
 
         if (tagData.ownerUid === currentUser.uid) {
-          // 🛠️ SENARYO 2: YETKİLİ ERİŞİM (BAĞLANTI KALDIRMA / SIFIRLAMA PROTOKOLÜ)
           setLoading(false);
           const confirmDelete = confirm(`Bu etiket zaten sizin profilinize kayıtlıdır.\n\nEtiketin hesabınızla olan bağlantısını kesmek (veri tabanından silmek) istiyor musunuz?`);
           
@@ -73,11 +126,8 @@ export default function WebNfcView({ onNavigateToProfile }: WebNfcViewProps) {
             setTagIdInput('');
           }
         } else {
-          // 🛡️ SENARYO 3: DIŞ KULLANICI / BULUCU GÜVENLİK MODU
           setLoading(false);
           alert("Kayıtlı Güvence Etiketi Algılandı! Bu ürün başka bir kullanıcıya aittir. Güvenli profil kartı yükleniyor...");
-          
-          // App.web.tsx üzerinden profil sekmesine fırlatıyoruz kralı
           onNavigateToProfile(tagData.ownerUid);
         }
       }
@@ -87,6 +137,17 @@ export default function WebNfcView({ onNavigateToProfile }: WebNfcViewProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // =========================================================================
+  // 🔍 KISIM 2: MANUEL PARMAKLA YAZILIP BUTONA BASILAN VELİ SORGUSU
+  // =========================================================================
+  const handleManualTestQuery = async () => {
+    if (!testUid.trim()) {
+      alert("Sorgulamayı başlatmak için lütfen geçerli bir kullanıcı referans kimliği giriniz.");
+      return;
+    }
+    await handleManualTestQueryDirect(testUid.trim());
   };
 
   return (
@@ -111,6 +172,7 @@ export default function WebNfcView({ onNavigateToProfile }: WebNfcViewProps) {
                 <MaterialCommunityIcons name="nfc-variant" size={54} color="#beaf9f" />
               </View>
               
+              {/* ÜNİTE 1: NFC ETİKET UID SORGULAMA */}
               <Text style={styles.inputLabel}>Etiket / Tag Benzersiz Numarası (UID)</Text>
               <TextInput
                 style={styles.testInput}
@@ -122,9 +184,35 @@ export default function WebNfcView({ onNavigateToProfile }: WebNfcViewProps) {
                 autoCorrect={false}
               />
 
-              <TouchableOpacity style={styles.queryButton} onPress={handleWebTagQuery}>
+              <TouchableOpacity style={[styles.queryButton, { marginBottom: 30 }]} onPress={handleWebTagQuery}>
                 <MaterialCommunityIcons name="shield-sync-outline" size={20} color="#fff" />
                 <Text style={styles.queryButtonText}>ETİKETİ DOĞRULA VE İŞLEM YAP</Text>
+              </TouchableOpacity>
+
+              <View style={styles.divider} />
+
+              {/* ÜNİTE 2: MANUEL VELİ KİMLİK SORGULAMA */}
+              <View style={styles.testHeaderRow}>
+                <MaterialCommunityIcons name="shield-check" size={18} color="#beaf9f" />
+                <Text style={styles.testTitle}>Manuel Kimlik Doğrulama Ünitesi</Text>
+              </View>
+              <Text style={styles.testSub}>
+                NFC donanımı aktif olmayan veya kısıtlı erişime sahip sistemlerde, acil durum veri tabanı senkronizasyonunu çağırmak için veli referans kimliğini manuel girebilirsiniz:
+              </Text>
+
+              <TextInput
+                style={styles.testInput}
+                placeholder="Güvence Referans Kimliğini (UID) Giriniz"
+                placeholderTextColor="#8e8e93"
+                value={testUid}
+                onChangeText={setTestUid}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <TouchableOpacity style={[styles.queryButton, { backgroundColor: '#1c1c1e' }]} onPress={handleManualTestQuery}>
+                <MaterialCommunityIcons name="shield-search" size={20} color="#fff" />
+                <Text style={styles.queryButtonText}>ACİL DURUM PROFİLİNİ SORGULA</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -149,9 +237,14 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 13, fontWeight: '700', color: '#1c1c1e', alignSelf: 'flex-start', marginBottom: 8, letterSpacing: 0.2 },
   testInput: { width: '100%', height: 50, backgroundColor: '#f2f2f7', borderRadius: 10, paddingHorizontal: 15, fontSize: 14, color: '#1c1c1e', fontWeight: '600', marginBottom: 20, borderWidth: 0.5, borderColor: '#e5e5ea' },
   
-  queryButton: { flexDirection: 'row', backgroundColor: '#beaf9f', width: '100%', height: 52, borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#beaf9f', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
+  queryButton: { flexDirection: 'row', backgroundColor: '#beaf9f', width: '100%', height: 52, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   queryButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold', marginLeft: 8, letterSpacing: 0.5 },
   
   loaderContainer: { justifyContent: 'center', alignItems: 'center', paddingVertical: 40 },
-  loaderText: { marginTop: 16, fontSize: 13, color: '#8e8e93', fontWeight: '500', textAlign: 'center' }
+  loaderText: { marginTop: 16, fontSize: 13, color: '#8e8e93', fontWeight: '500', textAlign: 'center' },
+  
+  divider: { width: '100%', height: 1, backgroundColor: '#e5e5ea', marginBottom: 25 },
+  testHeaderRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginBottom: 8 },
+  testTitle: { fontSize: 13, fontWeight: '700', color: '#beaf9f', marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  testSub: { fontSize: 12, color: '#636366', lineHeight: 16, marginBottom: 15, alignSelf: 'flex-start' }
 });
