@@ -16,7 +16,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ChatList from './src/views/ChatList';
 import ChatScreen from './src/views/ChatScreen'; 
 import NfcScreen from './src/screens/NfcScreen';
-import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'; // 👑 Ekran importumuz yerinde kanka
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'; 
 import { LogBox } from 'react-native';
 
 LogBox.ignoreLogs([
@@ -28,6 +28,17 @@ const Stack = createStackNavigator();
 const LoadingPlaceholder = () => (
   <View style={{ flex: 1, backgroundColor: '#f8f9fa' }} />
 );
+
+// 📡 DEEP LINKING CONFIGURATION Protokolü (2. ADIM)
+const linking = {
+  prefixes: ['nfctt://'],
+  config: {
+    screens: {
+      // 📍 nfctt://profile/UID formatındaki linki yakalayıp ProfileScreen'e yönlendirir kanka
+      ProfileScreen: 'profile/:targetUid',
+    },
+  },
+};
 
 const App = () => {
   const [initializing, setInitializing] = useState<boolean>(true);
@@ -78,26 +89,23 @@ const App = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
-      <NavigationContainer>
+      {/* 👑 DEEP LINKING YAPILANDIRMASINI CONTAINER'A BAĞLADIK KANKA */}
+      <NavigationContainer linking={linking}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {user ? (
             hasProfile === null ? (
               <Stack.Screen name="LoadingPlaceholder" component={LoadingPlaceholder} />
             ) : hasProfile ? (
-              // 👑 DURUM A: PROFİLİ OLAN KULLANICI
               <>
                 <Stack.Screen name="Home" component={HomeScreen} />
                 <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
                 <Stack.Screen name="Nfc" component={NfcScreen} />
                 <Stack.Screen name="ChatList" component={ChatList} />
                 <Stack.Screen name="ChatScreen" component={ChatScreen} />
-                {/* 👑 GÜNCELLEME: İsim senkronizasyonu tamamlandı */}
                 <Stack.Screen name="ProfileSetupScreen" component={ProfileSetupScreen} />
               </>
             ) : (
-              // 🌾 DURUM B: YENİ KAYIT OLMUŞ / PROFİLİ OLMAYAN KULLANICI
               <>
-                {/* 👑 GÜNCELLEME: İsim senkronizasyonu tamamlandı. RegisterScreen artık burayı zınk diye tetikleyecek! */}
                 <Stack.Screen name="ProfileSetupScreen" component={ProfileSetupScreen} />
                 <Stack.Screen name="Home" component={HomeScreen} />
                 <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
@@ -107,11 +115,9 @@ const App = () => {
               </>
             )
           ) : (
-            // 🔒 DURUM C: OTURUM KAPALIYKEN GÖRÜNECEK EKRANLAR
             <>
               <Stack.Screen name="UniversalLoginScreen" component={UniversalLoginScreen} />
               <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
-              {/* 🌾 KANKA: YENİ KURUMSAL ŞİFRE SIFIRLAMA EKRANINI BURAYA EKLEDİM */}
               <Stack.Screen name="ForgotPasswordScreen" component={ForgotPasswordScreen} />
             </>
           )}
