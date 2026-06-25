@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; 
 import { 
   View, 
   ActivityIndicator, 
@@ -17,14 +17,20 @@ import WebChatView from './src/views/WebChatView';
 import WebNfcView from './src/views/WebNfcView';
 import WebProfileView from './src/views/WebProfileView';
 import WebProfileSetupView from './src/views/WebProfileSetupView';
+import * as Font from 'expo-font';
+
+// 🔥 Firebase modülleri ve auth çekirdeğini dahil ediyoruz kanka
+import { db, auth } from './src/config/firebaseConfig';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signOut } from 'firebase/auth'; // <-- Canlı takip ve çıkış motoru
 
 // =========================================================================
-// 📱 COMPONENT: RESPONSIVE MENU (MASAÜSTÜNDE SOLDA, MOBİLDE ALTA GEÇER)
+// 📱 COMPONENT: RESPONSIVE MENU
 // =========================================================================
 interface MenuProps {
   navigation: any;
   activeScreen: 'Home' | 'Settings' | 'NFC' | 'Chat' | 'Profile';
-  onClearTargetUid: () => void; // Kendi profiline basınca bulucu modunu sıfırlayacak tetikleyici kanka
+  onClearTargetUid: () => void;
 }
 
 function NavigationMenu({ navigation, activeScreen, onClearTargetUid }: MenuProps) {
@@ -47,7 +53,7 @@ function NavigationMenu({ navigation, activeScreen, onClearTargetUid }: MenuProp
 
     if (targetRoute === 'ProfileScreen' || targetRoute === 'Home') {
       if (targetRoute === 'ProfileScreen') {
-        onClearTargetUid(); // Profilim sekmesine tıklanınca eski bulucu modunu temizle reis
+        onClearTargetUid();
       }
       navigation.reset({
         index: 0,
@@ -82,17 +88,17 @@ function NavigationMenu({ navigation, activeScreen, onClearTargetUid }: MenuProp
         />
         {!isMobile && <Text style={[menuStyles.barText, activeScreen === 'Home' && menuStyles.activeText]}>Anasayfa</Text>}
       </TouchableOpacity>
-
-      {/* 2. MESAJLAR */}
-      <TouchableOpacity style={itemStyle} onPress={() => handleTabPress('ChatList')}>
+      
+      {/* 5. AYARLAR */}
+      <TouchableOpacity style={itemStyle} onPress={() => handleTabPress('ProfileSetup')}>
         <Ionicons 
-          name={activeScreen === 'Chat' ? "chatbox-ellipses" : "chatbox-ellipses-outline"} 
+          name={activeScreen === 'Settings' ? "settings" : "settings-outline"} 
           size={isMobile ? 22 : 24} 
-          color={activeScreen === 'Chat' ? activeColor : inactiveColor} 
+          color={activeScreen === 'Settings' ? activeColor : inactiveColor} 
         />
-        {!isMobile && <Text style={[menuStyles.barText, activeScreen === 'Chat' && menuStyles.activeText]}>Mesajlar</Text>}
+        {!isMobile && <Text style={[menuStyles.barText, activeScreen === 'Settings' && menuStyles.activeText]}>Ayarlar</Text>}
       </TouchableOpacity>
-
+      
       {/* 3. NFC TARAT */}
       <TouchableOpacity style={itemStyle} onPress={() => handleTabPress('Nfc')}>
         <Ionicons 
@@ -101,6 +107,16 @@ function NavigationMenu({ navigation, activeScreen, onClearTargetUid }: MenuProp
           color={activeScreen === 'NFC' ? activeColor : inactiveColor} 
         />
         {!isMobile && <Text style={[menuStyles.barText, activeScreen === 'NFC' && menuStyles.activeText]}>NFC Tarat</Text>}
+      </TouchableOpacity>
+      
+      {/* 2. MESAJLAR */}
+      <TouchableOpacity style={itemStyle} onPress={() => handleTabPress('ChatList')}>
+        <Ionicons 
+          name={activeScreen === 'Chat' ? "chatbox-ellipses" : "chatbox-ellipses-outline"} 
+          size={isMobile ? 22 : 24} 
+          color={activeScreen === 'Chat' ? activeColor : inactiveColor} 
+        />
+        {!isMobile && <Text style={[menuStyles.barText, activeScreen === 'Chat' && menuStyles.activeText]}>Mesajlar</Text>}
       </TouchableOpacity>
 
       {/* 4. PROFİLİM */}
@@ -112,16 +128,6 @@ function NavigationMenu({ navigation, activeScreen, onClearTargetUid }: MenuProp
         />
         {!isMobile && <Text style={[menuStyles.barText, activeScreen === 'Profile' && menuStyles.activeText]}>Profilim</Text>}
       </TouchableOpacity>
-
-      {/* 5. AYARLAR */}
-      <TouchableOpacity style={itemStyle} onPress={() => handleTabPress('ProfileSetup')}>
-        <Ionicons 
-          name={activeScreen === 'Settings' ? "settings" : "settings-outline"} 
-          size={isMobile ? 22 : 24} 
-          color={activeScreen === 'Settings' ? activeColor : inactiveColor} 
-        />
-        {!isMobile && <Text style={[menuStyles.barText, activeScreen === 'Settings' && menuStyles.activeText]}>Ayarlar</Text>}
-      </TouchableOpacity>
     </View>
   );
 }
@@ -130,42 +136,144 @@ function NavigationMenu({ navigation, activeScreen, onClearTargetUid }: MenuProp
 // 🚀 MAIN APPLICATION: APP COMPONENT
 // =========================================================================
 export default function App() {
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'Home' | 'Settings' | 'NFC' | 'Chat' | 'Profile'>('Home');
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  
-  // 🔥 ARANAN ANA STATE: Doğru hiyerarşide, component seviyesinde tanımlandı kral!
   const [viewingTargetUid, setViewingTargetUid] = useState<string | undefined>(undefined);
 
-  // Tag sorgulama state'leri
-  const [tagId, setTagId] = useState(''); 
-  const [profile, setProfile] = useState<any>(null); 
-  const [loading, setLoading] = useState(false);
+  const [urlTagId, setUrlTagId] = useState<string | null>(null);
+  const [forceLoginScreen, setForceLoginScreen] = useState(false); 
 
+  // 📡 1. KISIM: FONTLARI HAZIRLAMA VE FIREBASE AUTH CANLI RADARI
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      const savedUser = localStorage.getItem('nfctt_user');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
+    async function prepareFonts() {
+      try {
+        if (Platform.OS === 'web') {
+          await Font.loadAsync({
+            'Ionicons': require('./src/fonts/Ionicons.b4eb097d35f44ed943676fd56f6bdc51.ttf'), 
+          });
+        }
+      } catch (error) {
+        console.log("Font yükleme hatası:", error);
+      } finally {
+        setFontsLoaded(true);
       }
     }
-    setIsCheckingAuth(false);
+
+    prepareFonts();
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        console.log("🎯 [Auth Radar] Aktif Firebase oturumu saptandı:", firebaseUser.uid);
+        setUser(firebaseUser);
+      } else {
+        console.log("🎯 [Auth Radar] Aktif oturum yok veya güvenli çıkış yapıldı.");
+        setUser(null);
+      }
+      setIsCheckingAuth(false);
+    });
+
+    return () => unsubscribe(); 
   }, []);
 
-  const handleLoginSuccess = (userData: any) => {
+  // 📡 2. KISIM: URL DEĞİŞİKLİKLERİNİ TAKİP EDEN RADAR
+  useEffect(() => {
+    if (isCheckingAuth) return; 
+
+    const checkUrlParams = () => {
+      if (Platform.OS !== 'web') return;
+
+      const searchParams = new URLSearchParams(window.location.search);
+      let tagIdFromUrl = searchParams.get('tagId');
+
+      if (!tagIdFromUrl) {
+        const pathParts = window.location.pathname.split('/');
+        const lastPart = pathParts[pathParts.length - 1];
+        if (lastPart && lastPart !== '' && lastPart !== 'home' && lastPart !== 'login') {
+          tagIdFromUrl = lastPart;
+        }
+      }
+
+      if (tagIdFromUrl && tagIdFromUrl.trim() !== '') {
+        console.log("URL Radarı ID'yi başarıyla mühürledi:", tagIdFromUrl.trim());
+        setUrlTagId(tagIdFromUrl.trim());
+        setActiveTab('NFC');
+      }
+    };
+
+    checkUrlParams(); 
+    
+    window.addEventListener('popstate', checkUrlParams);
+    return () => window.removeEventListener('popstate', checkUrlParams);
+  }, [isCheckingAuth]);
+
+  // 🎯 GİRİŞ MOTORU: BULUCU KAYDI ANINDA OTOMATİK SOHBET KURAR
+  const handleLoginSuccess = async (userData: any) => {
     setUser(userData);
+    setForceLoginScreen(false); 
+    
     if (Platform.OS === 'web') {
-      localStorage.setItem('nfctt_user', JSON.stringify(userData));
+      const pendingChatUid = sessionStorage.getItem('pending_chat_target_uid');
+      if (pendingChatUid && userData?.uid) {
+        console.log("Yeni kayıt olan bulucu yakalandı! Otomatik oda mühürleniyor...", pendingChatUid);
+        
+        sessionStorage.removeItem('pending_chat_target_uid'); 
+        sessionStorage.removeItem('force_register_mode');
+
+        try {
+          const currentUserId = userData.uid;
+          const sortedUids = [currentUserId, pendingChatUid].sort();
+          const deterministicRoomId = `${sortedUids[0]}_${sortedUids[1]}`;
+
+          const chatRoomRef = doc(db, "chat_rooms", deterministicRoomId);
+          const chatRoomSnap = await getDoc(chatRoomRef);
+
+          if (!chatRoomSnap.exists()) {
+            await setDoc(chatRoomRef, {
+              roomId: deterministicRoomId,
+              participants: [currentUserId, pendingChatUid],
+              visibleTo: [currentUserId, pendingChatUid], 
+              createdAt: new Date().toISOString(),
+              lastMessage: "Güvenli sohbet kanalı otomatik aktif edildi reis.",
+              unreadCount: { [currentUserId]: 0, [pendingChatUid]: 0 }
+            });
+          }
+
+          setViewingTargetUid(pendingChatUid);
+          setActiveTab('Chat');
+          return;
+        } catch (err) {
+          console.error("Otomatik chat kurulum hatası:", err);
+        }
+      }
     }
+
+    setActiveTab('Home');
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    if (Platform.OS === 'web') {
-      localStorage.removeItem('nfctt_user');
+  // 🔥 ÇIKIŞ MOTORU
+  const handleLogoutOrRedirect = async () => {
+    if (user) {
+      try {
+        await signOut(auth);
+        console.log("✅ Firebase Auth oturumu başarıyla kapatıldı. İki başlılık bitti.");
+        setActiveTab('Home');
+      } catch (error) {
+        console.error("Çıkış yapılırken Firebase hatası:", error);
+      }
+    } else {
+      setUrlTagId(null);
+      setForceLoginScreen(true);
+      setActiveTab('Home'); 
+
+      if (Platform.OS === 'web') {
+        const cleanDomainUrl = window.location.origin; 
+        window.history.replaceState({}, document.title, cleanDomainUrl);
+      }
     }
   };
 
@@ -176,7 +284,7 @@ export default function App() {
       if(obj.name === 'Nfc') setActiveTab('NFC');
       if(obj.name === 'ChatList') setActiveTab('Chat');
       if(obj.name === 'ProfileScreen') {
-        setViewingTargetUid(undefined); // Manuel geçişlerde temizle kanka
+        setViewingTargetUid(undefined);
         setActiveTab('Profile');
       }
     },
@@ -190,26 +298,6 @@ export default function App() {
     }
   };
 
-  const handleSearch = async () => {
-    if (!tagId) {
-      alert("ID girmeden Frankfurt hattını meşgul etme kral!");
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await getProfileForWeb(tagId);
-      if (data) {
-        setProfile(data);
-      } else {
-        alert("Böyle bir ID yok, Frankfurt'tan eli boş döndük.");
-      }
-    } catch (error) {
-      console.log("Arama hatası:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const renderContent = () => {
     switch (activeTab) {
       case 'Home':
@@ -220,7 +308,6 @@ export default function App() {
         return (
           <WebProfileSetupView 
             onSaveSuccess={() => {
-              // Kayıt başarıyla bitince otomatik olarak Profil tabına zıplatıyoruz kralı!
               setActiveTab('Profile');
             }} 
           />
@@ -230,28 +317,35 @@ export default function App() {
       case 'NFC':
         return (
           <WebNfcView 
+            urlTagId={urlTagId} 
             onNavigateToProfile={(targetUid) => {
-              setViewingTargetUid(targetUid); // Hedef UID buraya mühürlendi
-              setActiveTab('Profile');       // Profil sekmesine fırlattık kanka
+              setViewingTargetUid(targetUid);
+              setActiveTab('Profile');
             }} 
           />
         );
     }
   };
 
-  if (isCheckingAuth) {
+  if (isCheckingAuth || !fontsLoaded) {
     return (
       <View style={appStyles.center}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 10 }}>Oturum kontrol ediliyor...</Text>
+        <Text style={{ marginTop: 10 }}>Oturum ve bileşenler kontrol ediliyor...</Text>
       </View>
     );
   }
 
-  if (!user) {
+  const isForcedRegister = Platform.OS === 'web' && sessionStorage.getItem('force_register_mode') === 'true';
+
+  // 🎯 DEĞİŞİKLİK BURADA: WebLoginScreen bileşenine isRegisterMode prop'unu paslıyoruz kral.
+  if (!user && (!urlTagId || forceLoginScreen || isForcedRegister)) {
     return (
       <View style={{ flex: 1 }}>
-        <WebLoginScreen onLoginSuccess={handleLoginSuccess} />
+        <WebLoginScreen 
+          onLoginSuccess={handleLoginSuccess} 
+          isRegisterMode={isForcedRegister} 
+        />
       </View>
     );
   }
@@ -259,7 +353,7 @@ export default function App() {
   return (
     <View style={[appStyles.container, { flexDirection: isMobile ? 'column' : 'row' }]}>
       
-      {!isMobile && (
+      {user && !isMobile && (
         <NavigationMenu 
           navigation={fakeNavigation} 
           activeScreen={activeTab} 
@@ -269,18 +363,23 @@ export default function App() {
 
       <View style={{ flex: 1, flexDirection: 'column' }}>
         <View style={appStyles.header}>
-          <Text style={appStyles.welcomeText}>NFCTT Panel ({user.email})</Text>
-          <TouchableOpacity onPress={handleLogout}>
-            <Text style={{color: 'red', fontWeight: 'bold'}}>Çıkış Yap</Text>
+          <Text style={appStyles.welcomeText}>
+            {user ? `NFCTT Panel (${user.email})` : "NFCTT Akıllı Güvence Sistemi"}
+          </Text>
+          
+          <TouchableOpacity onPress={handleLogoutOrRedirect}>
+            <Text style={{ color: user ? 'red' : '#007AFF', fontWeight: 'bold' }}>
+              {user ? 'Çıkış Yap' : 'Sisteme Giriş Yap'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        <View style={{ flex: 1, backgroundColor: '#fafafa', paddingBottom: isMobile ? 68 : 0 }}> 
+        <View style={{ flex: 1, backgroundColor: '#fafafa', paddingBottom: (isMobile && user) ? 68 : 0 }}> 
           {renderContent()}
         </View>
       </View>
 
-      {isMobile && (
+      {user && isMobile && (
         <NavigationMenu 
           navigation={fakeNavigation} 
           activeScreen={activeTab} 
@@ -292,95 +391,20 @@ export default function App() {
   );
 }
 
-// =========================================================================
-// 🎨 STYLES: COMPONENT STYLES
-// =========================================================================
 const menuStyles = StyleSheet.create({
-  sideBar: { 
-    flexDirection: 'column',
-    width: 240,
-    height: '100%',
-    backgroundColor: '#ffffff', 
-    borderRightWidth: 0.5,
-    borderColor: '#e5e5ea', 
-    paddingTop: 30,
-    paddingHorizontal: 15,
-  },
-  barItemDesktop: { 
-    flexDirection: 'row',
-    alignItems: 'center', 
-    width: '100%',
-    height: 50,
-    borderRadius: 10,
-    paddingLeft: 10,
-    marginBottom: 8,
-  },
+  sideBar: { flexDirection: 'column', width: 240, height: '100%', backgroundColor: '#ffffff', borderRightWidth: 0.5, borderColor: '#e5e5ea', paddingTop: 30, paddingHorizontal: 15 },
+  barItemDesktop: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 10, paddingLeft: 10, marginBottom: 8 },
   logoContainer: { marginBottom: 40, paddingLeft: 10 },
   logoText: { fontSize: 22, fontWeight: 'bold', letterSpacing: 1 },
-
-  bottomBar: { 
-    flexDirection: 'row', 
-    height: Platform.OS === 'ios' ? 85 : 68, 
-    backgroundColor: '#ffffff', 
-    borderTopWidth: 0.5, 
-    borderColor: '#e5e5ea', 
-    justifyContent: 'space-around', 
-    alignItems: 'center', 
-    paddingBottom: Platform.OS === 'ios' ? 18 : 0,
-    position: 'absolute', 
-    bottom: 0, left: 0, right: 0,
-    elevation: 8,
-    zIndex: 999
-  },
-  barItemMobile: { 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    flex: 1,
-    height: '100%'
-  },
-  barText: { 
-    fontSize: 15, 
-    color: '#8e8e93', 
-    fontWeight: '500',
-    marginLeft: 15, 
-  },
+  bottomBar: { flexDirection: 'row', height: Platform.OS === 'ios' ? 85 : 68, backgroundColor: '#ffffff', borderTopWidth: 0.5, borderColor: '#e5e5ea', justifyContent: 'space-around', alignItems: 'center', paddingBottom: Platform.OS === 'ios' ? 18 : 0, position: 'absolute', bottom: 0, left: 0, right: 0, elevation: 8, zIndex: 999 },
+  barItemMobile: { alignItems: 'center', justifyContent: 'center', flex: 1, height: '100%' },
+  barText: { fontSize: 15, color: '#8e8e93', fontWeight: '500', marginLeft: 15 },
   activeText: { color: '#000000', fontWeight: '700' }
 });
 
 const appStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    padding: 15, 
-    backgroundColor: 'white', 
-    borderBottomWidth: 1, 
-    borderColor: '#ddd',
-    height: 65,
-    alignItems: 'center'
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: 'white', borderBottomWidth: 1, borderColor: '#ddd', height: 65, alignItems: 'center' },
   welcomeText: { fontWeight: 'bold', color: '#333' },
-  searchBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
-  input: { 
-    width: '100%', 
-    maxWidth: 400, 
-    backgroundColor: 'white', 
-    padding: 15, 
-    borderRadius: 10, 
-    borderWidth: 1, 
-    borderColor: '#ddd',
-    marginBottom: 15 
-  },
-  searchButton: { 
-    backgroundColor: '#007AFF', 
-    padding: 15, 
-    borderRadius: 10, 
-    width: '100%', 
-    maxWidth: 400, 
-    alignItems: 'center' 
-  },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  centerText: { textAlign: 'center', marginTop: 50, fontSize: 18, color: '#666' },
-  backButton: { padding: 20 }
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });

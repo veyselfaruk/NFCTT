@@ -4,19 +4,30 @@ import {
   StyleSheet, Alert, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView, ImageBackground 
 } from 'react-native';
 
-// Controller importları (Mustafa'nın web motoru dahil milimetrik korundu)
+// Controller importları (Hem login hem signUp fonksiyonlarını içeri aldık kral)
 import { signIn as mobileSignIn, signUp as mobileSignUp } from '../controllers/AuthController';
-import { signIn as webSignIn } from '../controllers/WebAuthController'; 
+import { signIn as webSignIn, signUp as webSignUp } from '../controllers/WebAuthController'; 
 
 // Firebase modülleri ve Şifre Sıfırlama metodu
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { auth } from '../config/firebaseConfig';
 import { sendPasswordResetEmail } from 'firebase/auth';
 
-const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any, onLoginSuccess?: (user: any) => void }) => {
+// 🎯 TYPESCRIPT TİP TANIMI TAMİR EDİLDİ: isRegisterMode prop olarak buraya eklendi kanka
+interface LoginScreenProps {
+  navigation?: any;
+  onLoginSuccess?: (user: any) => void;
+  isRegisterMode?: boolean; // <-- Dışarıdan gelecek emir için kapıyı açtık
+}
+
+const UniversalLoginScreen = ({ navigation, onLoginSuccess, isRegisterMode: initialRegisterMode = false }: LoginScreenProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // 🔥 WEB İÇİN REKOR UX: İlk değeri dışarıdan gönderdiğimiz talimata (initialRegisterMode) bağlıyoruz kral!
+  // Eğer app.web.tsx'ten true gelirse direkt Kayıt Ol ekranıyla doğacak.
+  const [isRegisterMode, setIsRegisterMode] = useState(initialRegisterMode);
 
   // Ortak Bildirim Fonksiyonu
   const notify = (title: string, message: string) => {
@@ -60,7 +71,7 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
     }
   };
 
-  // === AUTH GİRİŞ MOTORU ===
+  // === AUTH GİRİŞ VE KAYIT MOTORU ===
   const handleAuth = async (type: 'login' | 'register') => {
     if (!email || !password) {
       notify('Uyarı', 'Lütfen tüm alanları eksiksiz doldurun.');
@@ -72,7 +83,7 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
 
     try {
       if (Platform.OS === 'web') {
-        result = type === 'login' ? await webSignIn(email, password) : { success: false, error: 'Web üzerinden kayıt henüz aktif değil.' };
+        result = type === 'login' ? await webSignIn(email, password) : await webSignUp(email, password);
       } else {
         result = type === 'login' ? await mobileSignIn(email, password) : await mobileSignUp(email, password);
       }
@@ -96,16 +107,12 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
             if (profileSnap.exists()) {
               console.log("Kayıtlı profil Firestore üzerinde başarıyla doğrulandı!");
               if (onLoginSuccess) onLoginSuccess(loggedInUser);
-              
               setLoading(false);
-              
               return; 
             } else {
               console.log("Bu UID ile eşleşen bir profil dökümanı bulunamadı.");
               if (onLoginSuccess) onLoginSuccess(loggedInUser);
-              
               setLoading(false);
-              // 👑 GÜNCELLEME: ProfileSetup -> ProfileSetupScreen olarak mühürlendi!
               navigation.replace('ProfileSetupScreen', { fullName: loggedInUser.displayName });
               return;
             }
@@ -113,7 +120,6 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
             console.error("Firestore profil sorgulama hatası:", dbErr);
             if (onLoginSuccess) onLoginSuccess(loggedInUser);
             setLoading(false);
-            // 👑 GÜNCELLEME: ProfileSetup -> ProfileSetupScreen olarak mühürlendi!
             navigation.replace('ProfileSetupScreen', { fullName: loggedInUser.displayName });
             return;
           }
@@ -121,13 +127,22 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
       }
 
       setLoading(false);
-      notify('Başarılı', type === 'login' ? 'Giriş başarılı.' : 'Kayıt işlemi başarılı.');
+      notify('Başarılı', type === 'login' ? 'Giriş başarılı.' : 'Kayıt işlemi başarılı. Panelinize yönlendiriliyorsunuz kral!');
+      
       if (onLoginSuccess && loggedInUser) {
         onLoginSuccess(loggedInUser);
       }
     } else {
       setLoading(false);
       notify('Hata', result?.error || 'Bir sorun oluştu. Lütfen tekrar deneyin.');
+    }
+  };
+
+  const handleToggleRegisterMode = () => {
+    if (Platform.OS === 'web') {
+      setIsRegisterMode(!isRegisterMode); 
+    } else {
+      if (navigation) navigation.navigate('RegisterScreen'); 
     }
   };
 
@@ -143,18 +158,16 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
       >
         <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           
-          {/* 🚀 KANKA: KEDİYİ KAPATAN DIŞARIDAKİ ESKİ LOGO ALANI TAMAMEN SİLİNDİ! */}
-
-          {/* INPUT FORM KARTI (BEYAZ ÇERÇEVELİ VE İÇİNDEN LOGOLU PREMİUM YAPI) */}
+          {/* INPUT FORM KARTI */}
           <View style={styles.card}>
             
-            {/* 🔥 MARKA ALANI ARTIK KARTIN İÇİNDE JİLET GİBİ DURUYOR */}
             <View style={styles.internalBrandContainer}>
               <Text style={styles.brandTitle}>NFCTT</Text>
               <Text style={styles.brandSubtitle}>
-                {Platform.OS === 'web' ? 'Web Yönetim Merkezi' : 'Güvenli Canlı Takip Sistemi'}
+                {Platform.OS === 'web' 
+                  ? (isRegisterMode ? 'Bulucu Kayıt Merkezi' : 'Web Yönetim Merkezi') 
+                  : 'Güvenli Canlı Takip Sistemi'}
               </Text>
-              {/* Şık kurumsal ayraç çizgisi */}
               <View style={styles.separator} />
             </View>
 
@@ -177,34 +190,39 @@ const UniversalLoginScreen = ({ navigation, onLoginSuccess }: { navigation?: any
               style={styles.input} 
             />
 
-            {/* Şifremi Unuttum Linki */}
-            <TouchableOpacity 
-              style={styles.forgotPasswordButton} 
-              onPress={() => navigation.navigate('ForgotPasswordScreen')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.forgotPasswordText}>Şifremi Unuttum?</Text>
-            </TouchableOpacity>
+            {!isRegisterMode && (
+              <TouchableOpacity 
+                style={styles.forgotPasswordButton} 
+                onPress={() => navigation && navigation.navigate('ForgotPasswordScreen')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.forgotPasswordText}>Şifremi Unuttum?</Text>
+              </TouchableOpacity>
+            )}
 
             {loading ? (
               <ActivityIndicator size="small" color="#2b231a" style={{ marginVertical: 15 }} />
             ) : (
               <View style={styles.buttonContainer}>
                 
-                {/* Giriş Yap Butonu */}
                 <TouchableOpacity 
                   style={styles.loginButton} 
-                  onPress={() => handleAuth('login')}
+                  onPress={() => handleAuth(isRegisterMode ? 'register' : 'login')}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.loginButtonText}>Giriş Yap</Text>
+                  <Text style={styles.loginButtonText}>
+                    {isRegisterMode ? 'Hesap Oluştur ve Başlat' : 'Giriş Yap'}
+                  </Text>
                 </TouchableOpacity>
 
-                {/* Minimalist Kayıt Ol Metin Linki */}
                 <View style={styles.registerContainer}>
-                  <Text style={styles.registerText}>Hesabınız yok mu? </Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
-                    <Text style={styles.registerLink}>Kayıt Ol</Text>
+                  <Text style={styles.registerText}>
+                    {isRegisterMode ? 'Zaten hesabınız var mı? ' : 'Hesabınız yok mu? '}
+                  </Text>
+                  <TouchableOpacity onPress={handleToggleRegisterMode}>
+                    <Text style={styles.registerLink}>
+                      {isRegisterMode ? 'Giriş Yap' : 'Kayıt Ol'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
@@ -221,34 +239,10 @@ const styles = StyleSheet.create({
   backgroundImage: { flex: 1, width: '100%', height: '100%' },
   container: { flex: 1, backgroundColor: 'transparent' },
   scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 25 },
-  
-  // 🔥 KART İÇİ YENİ MARKA ALANININ ESNEK STİLLERİ
-  internalBrandContainer: { 
-    alignItems: 'center', 
-    marginBottom: 25, 
-    marginTop: 5 
-  },
-  brandTitle: { 
-    fontSize: 30, // Kart içine yakışacak kibar boyut
-    fontWeight: '900', 
-    color: '#1c1c1e', 
-    letterSpacing: 1 
-  },
-  brandSubtitle: { 
-    fontSize: 12, 
-    color: '#8e8e93', 
-    marginTop: 4, 
-    fontWeight: '500' 
-  },
-  separator: {
-    width: '40%',
-    height: 1,
-    backgroundColor: '#e5e5ea',
-    marginTop: 14,
-    marginBottom: 5
-  },
-  
-  // KANKA: BEYAZ KART YAPISI VE KEDİYİ SERBEST BIRAKAN ÜST BOŞLUK (marginTop: 150)
+  internalBrandContainer: { alignItems: 'center', marginBottom: 25, marginTop: 5 },
+  brandTitle: { fontSize: 30, fontWeight: '900', color: '#1c1c1e', letterSpacing: 1 },
+  brandSubtitle: { fontSize: 12, color: '#8e8e93', marginTop: 4, fontWeight: '500' },
+  separator: { width: '40%', height: 1, backgroundColor: '#e5e5ea', marginTop: 14, marginBottom: 5 },
   card: { 
     width: Platform.OS === 'web' ? 400 : '100%', 
     alignSelf: 'center',
@@ -257,41 +251,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 0.5, 
     borderColor: '#e5e5ea',
-    marginTop: 150, // 🔥 Kartı aşağı basarak kedinin kuyruğu dahil tüm çizimi görünür kıldık!
+    marginTop: 150, 
     ...Platform.select({
       web: { boxShadow: '0px 4px 15px rgba(0,0,0,0.05)' },
       android: { elevation: 2 } 
     })
   },
-  
   inputLabel: { fontSize: 12, fontWeight: '600', color: '#1c1c1e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: { 
-    backgroundColor: '#f2f2f7', 
-    padding: 12, 
-    borderRadius: 10, 
-    marginBottom: 15, 
-    fontSize: 15,
-    color: '#000000'
-  },
-  
+  input: { backgroundColor: '#f2f2f7', padding: 12, borderRadius: 10, marginBottom: 15, fontSize: 15, color: '#000000' },
   forgotPasswordButton: { alignSelf: 'flex-end', marginBottom: 25, marginTop: -5 },
   forgotPasswordText: { fontSize: 13, color: '#666', fontWeight: '500', textDecorationLine: 'underline' },
-  
   buttonContainer: { marginTop: 5 },
-  
-  loginButton: {
-    backgroundColor: '#d1c7bd',
-    borderWidth: 0.5,
-    borderColor: '#beaf9f',
-    padding: 15, 
-    borderRadius: 10, 
-    alignItems: 'center',
-    ...Platform.select({
-      web: { cursor: 'pointer' }
-    })
-  },
+  loginButton: { backgroundColor: '#d1c7bd', borderWidth: 0.5, borderColor: '#beaf9f', padding: 15, borderRadius: 10, alignItems: 'center', ...Platform.select({ web: { cursor: 'pointer' } }) },
   loginButtonText: { color: '#2b231a', fontWeight: '700', fontSize: 16, letterSpacing: 0.3 },
-  
   registerContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
   registerText: { fontSize: 14, color: '#666' },
   registerLink: { fontSize: 14, color: '#1c1c1e', fontWeight: '700', textDecorationLine: 'underline' }
